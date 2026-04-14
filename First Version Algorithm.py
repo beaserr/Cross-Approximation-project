@@ -2,191 +2,159 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
-# Cross Approximation version1 with full pivoting 
 
-def cross_approx(A, maxi, epsilon=1e-6):
+# FULL CROSS APPROXIMATION 
+def cross_approx(A, maxi, epsilon=1e-12):
     m, n = A.shape
     R = A.copy()
+
     U = np.zeros((m, maxi))
     V = np.zeros((n, maxi))
 
     errors_fro = []
-    errors_2   = []
+    errors_2 = []
+
+    norm_fro = np.linalg.norm(A, 'fro')
+    norm_2 = np.linalg.norm(A, 2)
 
     for k in range(maxi):
-        max_val    = 0
-        pivot_row  = 0
-        pivot_col  = 0
+        pivot_row, pivot_col = np.unravel_index(np.argmax(np.abs(R)), R.shape)
+        max_val = R[pivot_row, pivot_col]
 
-        for i in range(m):
-            for j in range(n):
-                if abs(R[i, j]) > max_val:
-                    max_val   = abs(R[i, j])
-                    pivot_row = i
-                    pivot_col = j
-
-        if max_val < epsilon:
+        if abs(max_val) < epsilon:
             break
 
-        U[:, k] = R[:, pivot_col]
-        V[:, k] = R[pivot_row, :] / R[pivot_row, pivot_col]
+        u = R[:, pivot_col].copy()
+        v = R[pivot_row, :].copy() / max_val
 
-        R  = R - np.outer(U[:, k], V[:, k])
-        A_approx = U[:, :k+1]@ V[:, :k+1].T
+        U[:, k] = u
+        V[:, k] = v
 
-        errors_fro.append(np.linalg.norm(A - A_approx, 'fro') / np.linalg.norm(A, 'fro'))
-        errors_2  .append(np.linalg.norm(A - A_approx,   2 ) / np.linalg.norm(A,   2 ))
+        R -= np.outer(u, v)
 
-    return U[:, :k+1], V[:, :k+1], errors_fro, errors_2
+        S = U[:, :k+1] @ V[:, :k+1].T
+        errors_fro.append(np.linalg.norm(A - S, 'fro') / norm_fro)
+        errors_2.append(np.linalg.norm(A - S, 2) / norm_2)
+
+    k_final = len(errors_fro)
+    return U[:, :k_final], V[:, :k_final], errors_fro, errors_2
 
 
-# Adaptive Cross Approximation; firstversion with partial Pivoting 
+# PARTIAL CROSS APPROXIMATION 
 
-def partial_cross_approx(A, maxi, epsilon=1e-6):
+def partial_cross_approx(A, maxi, epsilon=1e-12):
     m, n = A.shape
     R = A.copy()
+
     U = np.zeros((m, maxi))
     V = np.zeros((n, maxi))
 
     errors_fro = []
-    errors_2   = []
+    errors_2 = []
 
-    pivot_row = 0                           
+    norm_fro = np.linalg.norm(A, 'fro')
+    norm_2 = np.linalg.norm(A, 2)
+    pivot_row = np.argmax(np.max(np.abs(R), axis=1))
 
     for k in range(maxi):
-        pivot_col = np.argmax(np.abs(R[pivot_row, :]))         
+
+        pivot_col = np.argmax(np.abs(R[pivot_row, :]))
+
         if abs(R[pivot_row, pivot_col]) < epsilon:
             break
-        pivot_row = np.argmax(np.abs(R[:, pivot_col]))        
 
-        U[:, k] = R[:, pivot_col]
-        V[:, k] = R[pivot_row, :] / R[pivot_row, pivot_col]
+        pivot_row = np.argmax(np.abs(R[:, pivot_col]))
 
-        R        = R - np.outer(U[:, k], V[:, k])
-        A_approx = U[:, :k+1] @ V[:, :k+1].T
+        u = R[:, pivot_col].copy()
+        v = R[pivot_row, :].copy() / R[pivot_row, pivot_col]
 
-        errors_fro.append(np.linalg.norm(A - A_approx, 'fro') / np.linalg.norm(A, 'fro'))
-        errors_2  .append(np.linalg.norm(A - A_approx,   2 ) / np.linalg.norm(A,   2 ))
+        U[:, k] = u
+        V[:, k] = v
 
-    return U[:, :k+1], V[:, :k+1], errors_fro, errors_2
+        R -= np.outer(u, v)
+
+        S = U[:, :k+1] @ V[:, :k+1].T
+
+        errors_fro.append(np.linalg.norm(A - S, 'fro') / norm_fro)
+        errors_2.append(np.linalg.norm(A - S, 2) / norm_2)
+
+    k_final = len(errors_fro)
+    return U[:, :k_final], V[:, :k_final], errors_fro, errors_2
 
 
-# SVD error functions
 
+# SVD ERROR
 def frob_error_svd(A, max_rank):
     s = np.linalg.svd(A, compute_uv=False)
-    errors = []
-    for k in range(1, max_rank + 1):
-        errors.append(np.sqrt(np.sum(s[k:]**2)) / np.sqrt(np.sum(s**2)))
-    return errors
+    norm_fro = np.sqrt(np.sum(s**2))
+
+    return [
+        np.sqrt(np.sum(s[k:]**2)) / norm_fro
+        for k in range(1, max_rank + 1)
+    ]
 
 
-def two_norm_error_svd(A, max_rank):
-    s = np.linalg.svd(A, compute_uv=False)
-    errors = []
-    for k in range(1, max_rank + 1):
-        errors.append(s[k] / s[0] if k < len(s) else 0.0)
-    return errors
-
-
-# Matrices to test  
-
-m, n     = 50, 50
-r        = 50
+# matrix
+m, n = 50, 50
+r = 50
 max_rank = 10
 
 np.random.seed(42)
 U_rand, _ = np.linalg.qr(np.random.rand(m, m))
 V_rand, _ = np.linalg.qr(np.random.rand(n, n))
 
-# Singular value  different decays : exponential, step, and polynomial
-singular_values_exp  = np.concatenate ([np.ones(r-20), np.exp(-np.arange(r-30))  
-#Smaller steps with the matrices 
-singular_values_step = np.concatenate([np.ones(r // 2), np.zeros(r - r // 2)]) 
-singular_values_poly = 1.0 / (np.arange(1, r + 1))                        
+R_eff = 10
+eps = 1e-3
 
-# Different low-rank matrices
-A_exp  = U_rand[:, :r]@ np.diag(singular_values_exp)@ V_rand[:, :r].T
-A_step = U_rand[:, :r]@ np.diag(singular_values_step)@ V_rand[:, :r].T
-A_poly = U_rand[:, :r]@ np.diag(singular_values_poly)@ V_rand[:, :r].T
+sigma_exp = np.ones(r)
+sigma_exp[R_eff:] = 10.0 ** (-0.25 * np.arange(1, r - R_eff + 1))
 
+sigma_poly = np.ones(r)
+sigma_poly[R_eff:] = 1.0 / np.arange(1, r - R_eff + 1)
 
-# Running approximations 
+sigma_step = np.ones(r)
+sigma_step[R_eff:] = eps
 
-_, _, ca_fro_step,  ca_2_step = cross_approx(A_step, maxi=max_rank)
-_, _, ca_fro_poly,  ca_2_poly = cross_approx(A_poly, maxi=max_rank)
-_, _, ca_fro_exp,   ca_2_exp  = cross_approx(A_exp,  maxi=max_rank)
-
-_, _, part_ca_fro_step, part_ca_2_step=partial_cross_approx(A_step, maxi=max_rank)
-_, _, part_ca_fro_poly, part_ca_2_poly= partial_cross_approx(A_poly, maxi=max_rank)
-_, _, part_ca_fro_exp,  part_ca_2_exp = partial_cross_approx(A_exp,  maxi=max_rank)
-
-ranks = np.arange(1, max_rank + 1)
-
-#Plot 1: Full Pivoting Cross Approximation
-plt.figure()
-
-plt.subplot(1, 3, 1)
-plt.semilogy(ranks, frob_error_svd(A_step, max_rank), label='SVD Frobenius')
-plt.semilogy(ranks, two_norm_error_svd(A_step, max_rank), label='SVD 2-Norm')
-#plt.semilogy(ranks, ca_fro_step, label='Cross Approx Frobenius')
-#plt.semilogy(ranks,   ca_2_step,   label='Cross Approx 2-Norm')
-plt.title('Step Decay')
-plt.xlabel('Rank k')
-plt.ylabel('Relative Error')
-plt.legend()
-
-plt.subplot(1, 3, 2)
-plt.semilogy(ranks, frob_error_svd(A_poly, max_rank), label='SVD Frobenius')
-plt.semilogy(ranks, two_norm_error_svd(A_poly, max_rank), label='SVD 2-Norm')
-#plt.semilogy(ranks, ca_fro_poly, label='Cross Approx Frobenius')
-#plt.semilogy(ranks,  ca_2_poly,   label='Cross Approx 2-Norm')
-plt.title('Polynomial Decay')
-plt.xlabel('Rank k')
-plt.legend()
-
-plt.subplot(1, 3, 3)
-plt.semilogy(ranks, frob_error_svd(A_exp, max_rank), label='SVD Frobenius')
-plt.semilogy(ranks, two_norm_error_svd(A_exp, max_rank), label='SVD 2-Norm')
-plt.semilogy(ranks, ca_fro_exp, label='Cross Approx Frobenius')
-plt.semilogy(ranks,   ca_2_exp,   label='Cross Approx 2-Norm')
-plt.title('Exponential Decay')
-plt.xlabel('Rank k')
-plt.legend()
-
-plt.suptitle('Full Pivoting Cross Approximation vs SVD')
-plt.show()
+A_exp = U_rand[:, :r] @ np.diag(sigma_exp) @ V_rand[:, :r].T
+A_poly = U_rand[:, :r] @ np.diag(sigma_poly) @ V_rand[:, :r].T
+A_step = U_rand[:, :r] @ np.diag(sigma_step) @ V_rand[:, :r].T
 
 
-# Plotting Adaptive Cross Approximation 
-plt.figure()
 
-plt.subplot(1,3,1)
-plt.semilogy(ranks, frob_error_svd(A_step, max_rank), label='SVD Frobenius')
-plt.semilogy(ranks, two_norm_error_svd(A_step, max_rank), label='SVD 2-Norm')
-plt.semilogy(ranks, part_ca_fro_step, label='Partial cross Approximation with Frobenius')
-plt.semilogy(ranks,  part_ca_2_step,   label='Partial cross Approximation with 2-Norm')
-plt.title('Step Decay')
-plt.xlabel('Rank k')
-plt.ylabel('Relative Error')
-plt.legend()
+_, _, ca_fro_exp, _ = cross_approx(A_exp, max_rank)
+_, _, pa_fro_exp, _ = partial_cross_approx(A_exp, max_rank)
 
-plt.subplot(1, 3, 2)
-plt.semilogy(ranks, frob_error_svd(A_poly, max_rank), label='SVD Frobenius')
-plt.semilogy(ranks, two_norm_error_svd(A_poly, max_rank), label='SVD 2-Norm')
-plt.semilogy(ranks, part_ca_fro_poly, label='Partial cross Approximation with Frobenius')
-plt.semilogy(ranks,  part_ca_2_poly,   label='Partial cross Approximation with 2-Norm')
-plt.title('Polynomial Decay')
-plt.xlabel('Rank k')
-plt.legend()
+_, _, ca_fro_poly, _ = cross_approx(A_poly, max_rank)
+_, _, pa_fro_poly, _ = partial_cross_approx(A_poly, max_rank)
 
-plt.subplot(1, 3, 3)
-plt.semilogy(ranks, frob_error_svd(A_exp, max_rank), label='SVD Frobenius')
-plt.semilogy(ranks, two_norm_error_svd(A_exp, max_rank), label='SVD 2-Norm')
-plt.semilogy(ranks, part_ca_fro_exp, label='Partial cross Approximation with Frobenius')
-plt.semilogy(ranks,  part_ca_2_exp,   label='Partial cross Approximation with 2-Norm')
-plt.title('Exponential Decay')
-plt.xlabel('Rank k')
-plt.legend()
-plt.suptitle('Partial Cross Approximation compared to SVD')
-plt.show()
+_, _, ca_fro_step, _ = cross_approx(A_step, max_rank)
+_, _, pa_fro_step, _ = partial_cross_approx(A_step, max_rank)
+
+#plot
+
+fig, axes = plt.subplots(1, 3, figsize=(15, 4))
+
+cases = [
+    ("exp", A_exp, ca_fro_exp, pa_fro_exp),
+    ("poly", A_poly, ca_fro_poly, pa_fro_poly),
+    ("step", A_step, ca_fro_step, pa_fro_step),
+]
+
+for ax, (name, A, ca, pa) in zip(axes, cases):
+
+    max_r = min(max(len(ca), len(pa)), max_rank)
+    svd_errors = frob_error_svd(A, max_r)
+
+    r1 = np.arange(1, len(svd_errors) + 1)
+
+    ax.plot(r1, svd_errors, label="svd")
+    ax.plot(range(1, len(ca)+1), ca, label="full")
+    ax.plot(range(1, len(pa)+1), pa, label="partial")
+
+    ax.set_title(name)
+    ax.grid(True)
+    ax.legend()
+
+plt.tight_layout()
+plt.savefig('cross_approximation_comparison.png', dpi=150, bbox_inches='tight')
+print("Plot saved as 'cross_approximation_comparison.png'")
