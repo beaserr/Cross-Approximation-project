@@ -2,88 +2,73 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 
+# Full pivoting cross approximation
 
-# FULL CROSS APPROXIMATION 
+
 def cross_approx(A, maxi, epsilon=1e-12):
     m, n = A.shape
     R = A.copy()
-
     U = np.zeros((m, maxi))
     V = np.zeros((n, maxi))
-
     errors_fro = []
-    errors_2 = []
-
     norm_fro = np.linalg.norm(A, 'fro')
-    norm_2 = np.linalg.norm(A, 2)
 
     for k in range(maxi):
-        pivot_row, pivot_col = np.unravel_index(np.argmax(np.abs(R)), R.shape)
-        max_val = R[pivot_row, pivot_col]
-
-        if abs(max_val) < epsilon:
+        idx = np.argmax(np.abs(R))
+        pivot_row = idx // n
+        pivot_col = idx % n
+        piv = R[pivot_row, pivot_col]
+        if abs(piv) < epsilon:
             break
 
         u = R[:, pivot_col].copy()
-        v = R[pivot_row, :].copy() / max_val
+        v = R[pivot_row, :].copy() / piv
 
         U[:, k] = u
         V[:, k] = v
 
         R -= np.outer(u, v)
-
         S = U[:, :k+1] @ V[:, :k+1].T
         errors_fro.append(np.linalg.norm(A - S, 'fro') / norm_fro)
-        errors_2.append(np.linalg.norm(A - S, 2) / norm_2)
-
     k_final = len(errors_fro)
-    return U[:, :k_final], V[:, :k_final], errors_fro, errors_2
+    return errors_fro
 
-
-# PARTIAL CROSS APPROXIMATION 
 
 def partial_cross_approx(A, maxi, epsilon=1e-12):
     m, n = A.shape
     R = A.copy()
-
     U = np.zeros((m, maxi))
     V = np.zeros((n, maxi))
-
     errors_fro = []
-    errors_2 = []
 
     norm_fro = np.linalg.norm(A, 'fro')
-    norm_2 = np.linalg.norm(A, 2)
-    pivot_row = np.argmax(np.max(np.abs(R), axis=1))
+    idx = np.argmax(np.abs(R))
+    pivot_row = idx // n
 
     for k in range(maxi):
-
         pivot_col = np.argmax(np.abs(R[pivot_row, :]))
+        pivot_row = np.argmax(np.abs(R[:, pivot_col]))
+        piv = R[pivot_row, pivot_col]
 
-        if abs(R[pivot_row, pivot_col]) < epsilon:
+        if abs(piv) < epsilon:
             break
 
-        pivot_row = np.argmax(np.abs(R[:, pivot_col]))
-
         u = R[:, pivot_col].copy()
-        v = R[pivot_row, :].copy() / R[pivot_row, pivot_col]
-
+        v = R[pivot_row, :].copy() / piv
         U[:, k] = u
         V[:, k] = v
 
         R -= np.outer(u, v)
 
         S = U[:, :k+1] @ V[:, :k+1].T
-
         errors_fro.append(np.linalg.norm(A - S, 'fro') / norm_fro)
-        errors_2.append(np.linalg.norm(A - S, 2) / norm_2)
+        idx = np.argmax(np.abs(R))
+        pivot_row = idx // n
 
     k_final = len(errors_fro)
-    return U[:, :k_final], V[:, :k_final], errors_fro, errors_2
+    return errors_fro
 
 
-
-# SVD ERROR
 def frob_error_svd(A, max_rank):
     s = np.linalg.svd(A, compute_uv=False)
     norm_fro = np.sqrt(np.sum(s**2))
@@ -94,67 +79,65 @@ def frob_error_svd(A, max_rank):
     ]
 
 
-# matrix
-m, n = 50, 50
-r = 50
-max_rank = 10
+# different test matrices
 
-np.random.seed(42)
-U_rand, _ = np.linalg.qr(np.random.rand(m, m))
-V_rand, _ = np.linalg.qr(np.random.rand(n, n))
-
-R_eff = 10
-eps = 1e-3
-
-sigma_exp = np.ones(r)
-sigma_exp[R_eff:] = 10.0 ** (-0.25 * np.arange(1, r - R_eff + 1))
-
-sigma_poly = np.ones(r)
-sigma_poly[R_eff:] = 1.0 / np.arange(1, r - R_eff + 1)
-
-sigma_step = np.ones(r)
-sigma_step[R_eff:] = eps
-
-A_exp = U_rand[:, :r] @ np.diag(sigma_exp) @ V_rand[:, :r].T
-A_poly = U_rand[:, :r] @ np.diag(sigma_poly) @ V_rand[:, :r].T
-A_step = U_rand[:, :r] @ np.diag(sigma_step) @ V_rand[:, :r].T
+def low_rank_psd_noise(n, R, xi):
+    # signal
+    D = np.zeros(n)
+    D[:r] = 1.0
+    A_signal = np.diag(D)
+    # Wishart noise 
+    G = np.random.randn(n, n)
+    W = G @ G.T / n 
+    return A_signal + xi * W
 
 
+def poly_decay_matrix(n, R, p):
+    diag = np.ones(n)
+    for k in range(n - R):
+        diag[R + k] = (k + 2) ** (-p)
+    return np.diag(diag)
 
-_, _, ca_fro_exp, _ = cross_approx(A_exp, max_rank)
-_, _, pa_fro_exp, _ = partial_cross_approx(A_exp, max_rank)
 
-_, _, ca_fro_poly, _ = cross_approx(A_poly, max_rank)
-_, _, pa_fro_poly, _ = partial_cross_approx(A_poly, max_rank)
+def exp_decay_matrix(n, R, q):
+    diag = np.ones(n)
+    for k in range(n - R):
+        diag[R + k] = 10 ** (-(k + 1) * q)
+    return np.diag(diag)
 
-_, _, ca_fro_step, _ = cross_approx(A_step, max_rank)
-_, _, pa_fro_step, _ = partial_cross_approx(A_step, max_rank)
 
-#plot
+# matrices parameters
+np.random.seed(0)
+n = 150          
+max_rank = 40    
+
+
+matrices = [
+    ("Step with noise (R=10, xi=5e-2)", low_rank_psd_noise(n, R=10, xi=5e-2)),
+    ("Polynomial decay (R=15, p=1.8)", poly_decay_matrix(n, R=15, p=1.8)),
+    ("Exponential decay (R=5, q=0.15)", exp_decay_matrix(n, R=5, q=0.15)),
+]
+
+
 
 fig, axes = plt.subplots(1, 3, figsize=(15, 4))
 
-cases = [
-    ("exp", A_exp, ca_fro_exp, pa_fro_exp),
-    ("poly", A_poly, ca_fro_poly, pa_fro_poly),
-    ("step", A_step, ca_fro_step, pa_fro_step),
-]
-
-for ax, (name, A, ca, pa) in zip(axes, cases):
-
+for i in range(3):
+    name, A = matrices[i]
+    ax = axes[i]
+    ca = cross_approx(A, max_rank)
+    pa = partial_cross_approx(A, max_rank)
     max_r = min(max(len(ca), len(pa)), max_rank)
-    svd_errors = frob_error_svd(A, max_r)
+    svd_err = frob_error_svd(A, max_r)
 
-    r1 = np.arange(1, len(svd_errors) + 1)
+    r = np.arange(1, len(svd_err) + 1)
 
-    ax.plot(r1, svd_errors, label="svd")
-    ax.plot(range(1, len(ca)+1), ca, label="full")
-    ax.plot(range(1, len(pa)+1), pa, label="partial")
+    ax.plot(r, svd_err, label="SVD")
+    ax.plot(range(1, len(ca)+1), ca, label="Full Pivoting Cross Approximation")
+    ax.plot(range(1, len(pa)+1), pa, label="Partial Cross Approximation")
 
     ax.set_title(name)
     ax.grid(True)
-    ax.legend()
 
-plt.tight_layout()
-plt.savefig('cross_approximation_comparison.png', dpi=150, bbox_inches='tight')
-print("Plot saved as 'cross_approximation_comparison.png'")
+axes.legend()
+plt.show()
