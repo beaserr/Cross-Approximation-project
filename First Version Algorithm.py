@@ -42,8 +42,7 @@ def partial_cross_approx(A, maxi, epsilon=1e-12):
     errors_fro = []
 
     norm_fro = np.linalg.norm(A, 'fro')
-    idx = np.argmax(np.abs(R))
-    pivot_row = idx // n
+    pivot_row = np.random.randint(m)  
 
     for k in range(maxi):
         pivot_col = np.argmax(np.abs(R[pivot_row, :]))
@@ -105,23 +104,31 @@ def exp_decay_matrix(n, R, q):
         diag[R + k] = 10 ** (-(k + 1) * q)
     return np.diag(diag)
 
+np.random.seed(0)
+n = 150 
+max_rank = 40  
+U, _ = np.linalg.qr(np.random.rand(n, n))
+V, _ = np.linalg.qr(np.random.rand(n, n))
+
+A_1 = U @ exp_decay_matrix(n, R=5, q=0.15) @ V.T
+A_2 = U @ poly_decay_matrix(n, R=15, p=1.8) @ V.T
+A_3 = low_rank_psd_noise(n, R=10, xi=0.5) @ V.T
 
 # matrices parameters
-np.random.seed(0)
-n = 150          
-max_rank = 40    
+
+         
+  
 
 
 matrices = [
-    ("Step with noise (R=10, xi=5e-2)", low_rank_psd_noise(n, R=10, xi=5e-2)),
-    ("Polynomial decay (R=15, p=1.8)", poly_decay_matrix(n, R=15, p=1.8)),
-    ("Exponential decay (R=5, q=0.15)", exp_decay_matrix(n, R=5, q=0.15)),
+    ("Step with noise (R=10, xi=5e-2)", A_3),
+    ("Polynomial decay (R=15, p=1.8)", A_2),
+    ("Exponential decay (R=5, q=0.15)", A_1),
 ]
 
 
 
 fig, axes = plt.subplots(1, 3, figsize=(15, 4))
-
 for i in range(3):
     name, A = matrices[i]
     ax = axes[i]
@@ -132,9 +139,9 @@ for i in range(3):
 
     r = np.arange(1, len(svd_err) + 1)
 
-    ax.plot(r, svd_err, label="SVD")
-    ax.plot(range(1, len(ca)+1), ca, label="Full Pivoting Cross Approximation")
-    ax.plot(range(1, len(pa)+1), pa, label="Partial Cross Approximation")
+    ax.semilogy(r, svd_err, label="SVD")
+    ax.semilogy(range(1, len(ca)+1), ca, label="Full Pivoting Cross Approximation")
+    ax.semilogy(range(1, len(pa)+1), pa, label="Partial Cross Approximation")
 
     ax.set_title(name)
     ax.grid(True)
