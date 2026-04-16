@@ -84,7 +84,7 @@ def frob_error_svd(A, max_rank):
 def low_rank_psd_noise(n, R, xi):
     # signal
     D = np.zeros(n)
-    D[:r] = 1.0
+    D[:R] = 1.0
     A_signal = np.diag(D)
     # Wishart noise 
     G = np.random.randn(n, n)
@@ -139,5 +139,6 @@ for i in range(3):
     ax.set_title(name)
     ax.grid(True)
 
-axes.legend()
+axes[0].legend()
+
 plt.show()
