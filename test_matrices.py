@@ -1,5 +1,4 @@
 def low_rank_psd_noise(n, R, xi):
-    # signal
     D = np.zeros(n)
     D[:R] = 1.0
     A_signal = np.diag(D)
