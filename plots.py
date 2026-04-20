@@ -1,7 +1,7 @@
 matrices = [
-    ("Step with noise (R=10, xi=5e-2)", A_3),
-    ("Polynomial decay (R=15, p=1.8)", A_2),
-    ("Exponential decay (R=5, q=0.15)", A_1),
+    ("Step with noise", A_3),
+    ("Polynomial decay", A_2),
+    ("Exponential decay", A_1),
 ]
 
 
