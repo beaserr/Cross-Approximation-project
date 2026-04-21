@@ -1,3 +1,8 @@
+from cross_functions import cross_approx
+from partial_cross_approx import  partial_cross_approx
+from frob_error_svd import frob_error_svd
+from test_matrices import test_matrices
+
 matrices = [
     ("Step with noise", A_3),
     ("Polynomial decay", A_2),
