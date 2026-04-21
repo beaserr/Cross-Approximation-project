@@ -1,4 +1,4 @@
-from cross_functions import cross_approx
+from cross_approx import cross_approx
 from partial_cross_approx import  partial_cross_approx
 from frob_error_svd import frob_error_svd
 from test_matrices import test_matrices
