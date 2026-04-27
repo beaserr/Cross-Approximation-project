@@ -19,8 +19,7 @@ def kernel_matrix(X):
     return X @ X.T
 
 # Low-rank matrix 
-def low_rank_psd_noise(n, R, xi, seed=0):
-    np.random.seed(seed)
+def low_rank_psd_noise(n, R, xi):
     D = np.zeros(n)
     D[:R] = 1.0
     A_signal = np.diag(D)
@@ -54,6 +53,6 @@ def test_matrices(n=150):
     # different matrix families
     A_1 = U @ exp_decay_matrix(n, R=5, q=0.15) @ V.T
     A_2 = U @ poly_decay_matrix(n, R=15, p=1.8) @ V.T
-    A_3 = low_rank_psd_noise(n, R=10, xi=0.5, seed=seed)
+    A_3 = low_rank_psd_noise(n, R=10, xi=0.5)
 
     return A_1, A_2, A_3
