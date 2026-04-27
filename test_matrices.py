@@ -1,8 +1,16 @@
+import numpy as np
+from sklearn.datasets import load_iris
+
+def load_iris_data():
+    data = load_iris()
+    X = data.data
+    y = data.target
+    return X, y, data
+
 # K[i, j] = X[i] X[j]
 def kernel_matrix(X):
-    X = np.asarray(X)
-    return X @ X.T   
-K = kernel_matrix(X)
+    X = np.asarray(X, dtype=float)
+    return X @ X.T
 
 
 def low_rank_psd_noise(n, R, xi):
