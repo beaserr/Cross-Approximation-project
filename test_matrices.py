@@ -1,3 +1,10 @@
+# K[i, j] = X[i] X[j]
+def kernel_matrix(X):
+    X = np.asarray(X)
+    return X @ X.T   
+K = kernel_matrix(X)
+
+
 def low_rank_psd_noise(n, R, xi):
     D = np.zeros(n)
     D[:R] = 1.0
