@@ -1,7 +1,7 @@
 import numpy as np
 
 def fpCA(A, max_rank, epsilon=1e-12):
-    A = np.asarray(A, dtype=float)
+    A = np.array(A)
     m, n = A.shape
     R = A.copy()
     U = np.zeros((m, max_rank))
@@ -30,7 +30,7 @@ def fpCA(A, max_rank, epsilon=1e-12):
 
 
 def ppCA(A, max_rank, epsilon=1e-12, start_row=0):
-    A = np.asarray(A, dtype=float)
+    A = np.array(A)
     m, n = A.shape
     R = A.copy()
     U = np.zeros((m, max_rank))
@@ -50,7 +50,6 @@ def ppCA(A, max_rank, epsilon=1e-12, start_row=0):
 
         u = R[:, pivot_col].copy()
         v = R[pivot_row, :].copy() / piv
-
         U[:, k] = u
         V[:, k] = v
         R -= np.outer(u, v)
@@ -62,7 +61,7 @@ def ppCA(A, max_rank, epsilon=1e-12, start_row=0):
 
 
 def frob_error_svd(A, max_rank):
-    A = np.asarray(A, dtype=float)
+    A = np.array(A)
     s = np.linalg.svd(A, compute_uv=False)
     normA = np.sqrt(np.sum(s**2))
     errors = []
