@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 
 from ca_methods import fpCA, ppCA, frob_error_svd
-from subjects import load_iris_data, linear_kernel_matrix
+from subjects import load_iris_data, kernel_matrix
 
 
 def run_iris_test(max_rank=40):
