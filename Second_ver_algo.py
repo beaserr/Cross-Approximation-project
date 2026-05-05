@@ -107,6 +107,42 @@ def ppCA(A, max_rank, epsilon=1e-12):
         errors.append(err)   
     return errors
 
+def ppCA2(A, max_rank, epsilon=1e-12):
+    m, n = A.shape
+    U = np.zeros((m, max_rank))
+    V = np.zeros((n, max_rank))
+    errors = []
+    normA = np.linalg.norm(A, 'fro')
+    pivot_row = 0
+
+    for k in range(max_rank):
+        for _ in range(m):
+            b = A[pivot_row, :].copy()
+            for mu in range(k):
+                b -= U[pivot_row, mu] * V[:, mu]
+            pivot_col = np.argmax(np.abs(b))
+            piv = b[pivot_col]
+
+            if abs(piv) > epsilon:
+                break
+
+            pivot_row = (pivot_row + 1) % m
+        else:
+            break
+
+        a = A[:, pivot_col].copy()
+        for mu in range(k):
+            a -= U[:, mu] * V[pivot_col, mu]
+        a /= piv
+
+        U[:, k] = a
+        V[:, k] = b
+
+        pivot_row = np.argmax(np.abs(a))
+        S = U[:, :k+1] @ V[:, :k+1].T
+        err = np.linalg.norm(A - S, 'fro') / normA
+        errors.append(err)
+    return errors
 
 
 def func_ppca(A_func, m, n, max_rank, epsilon=1e-12):
@@ -162,9 +198,10 @@ K = kernel_matrix(X)
 
 max_rank = 40
 fca_err = fpCA(K, max_rank)
+pca2_err = ppCA2(K, max_rank)
 ppca_err = ppCA(K, max_rank)
 
-r = min(len(fca_err), len(ppca_err), max_rank)
+r = min(len(fca_err), max_rank)
 svd_err = svd_error(K, r)
 
 plt.figure(figsize=(8, 5))
@@ -184,13 +221,15 @@ A1, A2, A3 = generate_test_matrices()
 for i, A in enumerate([A1, A2, A3], start=1):
     fca_err = fpCA(A, max_rank)
     ppca_err = ppCA(A, max_rank)
+    ppca2_err = ppCA2(A, max_rank)
 
-    r = min(len(fca_err), len(ppca_err), max_rank)
+    r = min(len(fca_err), max_rank)
     svd_err = svd_error(A, r)
     plt.figure(figsize=(8, 5))
     plt.semilogy(range(1, r+1), svd_err, label="SVD")
     plt.semilogy(range(1, len(fca_err)+1), fca_err, label="FCA")
     plt.semilogy(range(1, len(ppca_err)+1), ppca_err, label="ppCA")
+    plt.semilogy(range(1, len(ppca2_err)+1), ppca2_err, label="ppCA2")
 
     plt.title(f"Test matrix A{i}")
     plt.xlabel("Rank")
