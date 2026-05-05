@@ -109,6 +109,47 @@ def ppCA(A, max_rank, epsilon=1e-12):
         errors.append(err)   
     return errors
 
+import numpy as np
+
+def func_ppca(A_func, m, n, max_rank, epsilon=1e-12):
+    U = np.zeros((m, max_rank))
+    V = np.zeros((n, max_rank))
+    errors = []
+    normA = np.sqrt(sum(A_func(i, j)**2 for i in range(m) for j in range(n)))
+
+    pivot_row = 0
+
+    for k in range(max_rank):
+        b = np.array([A_func(pivot_row, j) for j in range(n)])
+
+        for mu in range(k):
+            b -= U[pivot_row, mu] * V[:, mu]
+
+        pivot_col = np.argmax(np.abs(b))
+        piv = b[pivot_col]
+
+        if abs(piv) < epsilon:
+            break
+        a = np.array([A_func(i, pivot_col) for i in range(m)])
+        for mu in range(k):
+            a -= U[:, mu] * V[pivot_col, mu]
+        a /= piv
+        U[:, k] = a
+        V[:, k] = b
+        pivot_row = np.argmax(np.abs(a))
+        S_err = 0
+        for i in range(m):
+            for j in range(n):
+                s = 0
+                for mu in range(k + 1):
+                    s += U[i, mu] * V[j, mu]
+                diff = A_func(i, j) - s
+                S_err += diff * diff
+
+        err = np.sqrt(S_err) / normA
+        errors.append(err)
+    return errors
+
 def svd_error(A, max_rank):
     s = np.linalg.svd(A, compute_uv=False)
     normA = np.sqrt(np.sum(s**2))
