@@ -80,7 +80,7 @@ def ppCA(A, max_rank, epsilon=1e-12):
     V = np.zeros((n, max_rank))
     errors = []
     normA = np.linalg.norm(A, 'fro')
-    pivot_row = 0
+    pivot_row = np.random.randint(0, n)
 
     for k in range(max_rank):
         b = A[pivot_row, :].copy()
