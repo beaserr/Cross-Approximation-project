@@ -29,34 +29,38 @@ def fpCA(A, max_rank, epsilon=1e-12):
     return errors, U[:, :r], V[:, :r]
 
 
-def ppCA(A, max_rank, epsilon=1e-12, start_row=0):
-    A = np.array(A)
+def ppCA(A, max_rank, epsilon=1e-12):
     m, n = A.shape
-    R = A.copy()
     U = np.zeros((m, max_rank))
     V = np.zeros((n, max_rank))
     errors = []
-    normA = np.linalg.norm(A, "fro")
-
-    pivot_row = start_row % m
+    normA = np.linalg.norm(A, 'fro')
+    pivot_row = 0
 
     for k in range(max_rank):
-        pivot_col = np.argmax(np.abs(R[pivot_row, :]))
-        pivot_row = np.argmax(np.abs(R[:, pivot_col]))
-        piv = R[pivot_row, pivot_col]
+        b = A[pivot_row, :].copy()
+        for mu in range(k):
+            b -= U[pivot_row, mu] * V[:, mu]
+            
+        pivot_col = np.argmax(np.abs(b))
+        piv = b[pivot_col]
 
         if abs(piv) < epsilon:
             break
 
-        u = R[:, pivot_col].copy()
-        v = R[pivot_row, :].copy() / piv
-        U[:, k] = u
-        V[:, k] = v
-        R -= np.outer(u, v)
-        S = U[:, :k + 1] @ V[:, :k + 1].T
-        err = np.linalg.norm(A - S, "fro") / normA
-        errors.append(err)
-    r = len(errors)
+        a = A[:, pivot_col].copy()
+        for mu in range(k):
+            a -= U[:, mu] * V[pivot_col, mu]
+
+        a /= piv
+        U[:, k] = a
+        V[:, k] = b
+        pivot_row = np.argmax(np.abs(a))
+
+        S = U[:, :k+1] @ V[:, :k+1].T
+        err = np.linalg.norm(A - S, 'fro') / normA
+        errors.append(err)   
+        r = len(errors)
     return errors, U[:, :r], V[:, :r]
 
 
