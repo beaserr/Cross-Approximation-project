@@ -109,7 +109,7 @@ def ppCA(A, max_rank, epsilon=1e-12):
         errors.append(err)   
     return errors
 
-import numpy as np
+
 
 def func_ppca(A_func, m, n, max_rank, epsilon=1e-12):
     U = np.zeros((m, max_rank))
