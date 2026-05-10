@@ -1,7 +1,8 @@
+import random
+
 import numpy as np
 import matplotlib.pyplot as plt
 from sklearn.datasets import load_iris
-
 
 
 def load_iris_data():
@@ -11,6 +12,17 @@ def load_iris_data():
 def kernel_matrix(X):
     X = np.asarray(X, dtype=float)
     return X @ X.T
+
+def gaussian_kernel(x, y, sigma=1.0):
+    x = np.asarray(x, dtype=float)
+    y = np.asarray(y, dtype=float)
+    return np.exp(-np.sum((x - y) ** 2) / (2.0 * sigma ** 2))
+
+def gaussian_kernel_matrix(X, sigma=1.0):
+    X = np.asarray(X, dtype=float)
+    s = np.sum(X * X, axis=1, keepdims=True)
+    d2 = s + s.T - 2.0 * (X @ X.T)
+    return np.exp(-np.maximum(d2, 0.0) / (2.0 * sigma ** 2))
   
 def low_rank_psd_noise(n, R, xi, seed=0):
     np.random.seed(seed)
@@ -100,6 +112,7 @@ def ppCA(A, max_rank, epsilon=1e-12):
         a /= piv
         U[:, k] = a
         V[:, k] = b
+        a[pivot_row] = 0
         pivot_row = np.argmax(np.abs(a))
 
         S = U[:, :k+1] @ V[:, :k+1].T
@@ -107,41 +120,46 @@ def ppCA(A, max_rank, epsilon=1e-12):
         errors.append(err)   
     return errors
 
-def ppCA2(A, max_rank, epsilon=1e-12):
+
+def ppCA_adaptive(A, max_rank, epsilon=1e-12):
     m, n = A.shape
     U = np.zeros((m, max_rank))
     V = np.zeros((n, max_rank))
     errors = []
     normA = np.linalg.norm(A, 'fro')
-    pivot_row = 0
+    normA1 = np.linalg.norm(A, 1)
+    pivot_row = np.random.randint(0, n)
 
     for k in range(max_rank):
-        for _ in range(m):
-            b = A[pivot_row, :].copy()
-            for mu in range(k):
-                b -= U[pivot_row, mu] * V[:, mu]
-            pivot_col = np.argmax(np.abs(b))
-            piv = b[pivot_col]
+        b = A[pivot_row, :].copy()
+        for mu in range(k):
+            b -= U[pivot_row, mu] * V[:, mu]
 
-            if abs(piv) > epsilon:
-                break
+        pivot_col = np.argmax(np.abs(b))
+        piv = b[pivot_col]
 
-            pivot_row = (pivot_row + 1) % m
-        else:
+        if abs(piv) < epsilon:
             break
 
         a = A[:, pivot_col].copy()
         for mu in range(k):
             a -= U[:, mu] * V[pivot_col, mu]
-        a /= piv
 
+        a /= piv
         U[:, k] = a
         V[:, k] = b
 
-        pivot_row = np.argmax(np.abs(a))
         S = U[:, :k+1] @ V[:, :k+1].T
-        err = np.linalg.norm(A - S, 'fro') / normA
+        R = A - S
+        err = np.linalg.norm(R, 'fro') / normA
         errors.append(err)
+
+        if np.linalg.norm(R, 2) <= epsilon * normA1:
+            break
+
+        a[pivot_row] = 0
+        pivot_row = np.argmax(np.abs(a))
+
     return errors
 
 
@@ -184,6 +202,12 @@ def func_ppca(A_func, m, n, max_rank, epsilon=1e-12):
         errors.append(err)
     return errors
 
+
+def func_ppca_adaptive(A_func, m, n, max_rank, epsilon=1e-12):
+    A = np.array([[A_func(i, j) for j in range(n)] for i in range(m)], dtype=float)
+    return ppCA_adaptive(A, max_rank, epsilon)
+
+
 def svd_error(A, max_rank):
     s = np.linalg.svd(A, compute_uv=False)
     normA = np.sqrt(np.sum(s**2))
@@ -193,13 +217,14 @@ def svd_error(A, max_rank):
         errors.append(err)
     return errors
 
+
 X = load_iris_data()
-K = kernel_matrix(X)
+K = gaussian_kernel_matrix(X, sigma=1.0)
 
 max_rank = 40
 fca_err = fpCA(K, max_rank)
-pca2_err = ppCA2(K, max_rank)
 ppca_err = ppCA(K, max_rank)
+ppca_adapt_err = ppCA_adaptive(K, max_rank, epsilon=1e-12)
 
 r = min(len(fca_err), max_rank)
 svd_err = svd_error(K, r)
@@ -208,7 +233,7 @@ plt.figure(figsize=(8, 5))
 plt.semilogy(range(1, r+1), svd_err, label="SVD")
 plt.semilogy(range(1, len(fca_err)+1), fca_err, label="FCA")
 plt.semilogy(range(1, len(ppca_err)+1), ppca_err, label="ppCA")
-
+plt.semilogy(range(1, len(ppca_adapt_err)+1), ppca_adapt_err, label="ppCA adaptive")
 plt.title("Iris kernel matrix approximation")
 plt.xlabel("Rank")
 plt.ylabel("Relative Frobenius error")
@@ -221,16 +246,16 @@ A1, A2, A3 = generate_test_matrices()
 for i, A in enumerate([A1, A2, A3], start=1):
     fca_err = fpCA(A, max_rank)
     ppca_err = ppCA(A, max_rank)
-    ppca2_err = ppCA2(A, max_rank)
+    ppca_adapt_err = ppCA_adaptive(A, max_rank, epsilon=1e-12)
 
     r = min(len(fca_err), max_rank)
     svd_err = svd_error(A, r)
+
     plt.figure(figsize=(8, 5))
     plt.semilogy(range(1, r+1), svd_err, label="SVD")
     plt.semilogy(range(1, len(fca_err)+1), fca_err, label="FCA")
     plt.semilogy(range(1, len(ppca_err)+1), ppca_err, label="ppCA")
-    plt.semilogy(range(1, len(ppca2_err)+1), ppca2_err, label="ppCA2")
-
+    plt.semilogy(range(1, len(ppca_adapt_err)+1), ppca_adapt_err, label="ppCA adaptive")
     plt.title(f"Test matrix A{i}")
     plt.xlabel("Rank")
     plt.ylabel("Relative Frobenius error")
