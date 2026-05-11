@@ -10,13 +10,13 @@ def load_iris_data():
     return data.data
 
 def kernel_matrix(X):
-    X = np.asarray(X, dtype=float)
+    X = np.asarray(X)
     return X @ X.T
 
 def gaussian_kernel(x, y, sigma=1.0):
-    x = np.asarray(x, dtype=float)
-    y = np.asarray(y, dtype=float)
-    return np.exp(-np.sum((x - y) ** 2) / (2.0 * sigma ** 2))
+    x = np.asarray(x)
+    y = np.asarray(y)
+    return np.exp(-np.sum((x - y) ** 2) / ( sigma ** 2))
 
 def gaussian_kernel_matrix(X, sigma=1.0):
     X = np.asarray(X, dtype=float)
@@ -126,9 +126,11 @@ def ppCA_adaptive(A, max_rank, epsilon=1e-12):
     U = np.zeros((m, max_rank))
     V = np.zeros((n, max_rank))
     errors = []
+    pivot_row = np.random.randint(0, m)
+
     normA = np.linalg.norm(A, 'fro')
-    normA1 = np.linalg.norm(A, 1)
-    pivot_row = np.random.randint(0, n)
+    a1_norm = None
+    b1_norm = None
 
     for k in range(max_rank):
         b = A[pivot_row, :].copy()
@@ -137,28 +139,29 @@ def ppCA_adaptive(A, max_rank, epsilon=1e-12):
 
         pivot_col = np.argmax(np.abs(b))
         piv = b[pivot_col]
-
-        if abs(piv) < epsilon:
-            break
-
         a = A[:, pivot_col].copy()
         for mu in range(k):
             a -= U[:, mu] * V[pivot_col, mu]
 
         a /= piv
+
         U[:, k] = a
         V[:, k] = b
 
         S = U[:, :k+1] @ V[:, :k+1].T
-        R = A - S
-        err = np.linalg.norm(R, 'fro') / normA
+        err = np.linalg.norm(A - S, 'fro') / normA
         errors.append(err)
 
-        if np.linalg.norm(R, 2) <= epsilon * normA1:
+        if k == 0:
+            a1_norm = np.linalg.norm(a, 2)
+            b1_norm = np.linalg.norm(b, 2)
+
+        if np.linalg.norm(a, 2) * np.linalg.norm(b, 2) <= epsilon * a1_norm * b1_norm:
             break
 
-        a[pivot_row] = 0
-        pivot_row = np.argmax(np.abs(a))
+        a_next = a.copy()
+        a_next[pivot_row] = 0
+        pivot_row = np.argmax(np.abs(a_next))
 
     return errors
 
@@ -204,7 +207,7 @@ def func_ppca(A_func, m, n, max_rank, epsilon=1e-12):
 
 
 def func_ppca_adaptive(A_func, m, n, max_rank, epsilon=1e-12):
-    A = np.array([[A_func(i, j) for j in range(n)] for i in range(m)], dtype=float)
+    A = np.array([[A_func(i, j) for j in range(n)] for i in range(m)])
     return ppCA_adaptive(A, max_rank, epsilon)
 
 
@@ -220,26 +223,45 @@ def svd_error(A, max_rank):
 
 X = load_iris_data()
 K = gaussian_kernel_matrix(X, sigma=1.0)
+K2 = kernel_matrix(X)
 
-max_rank = 40
+max_rank = 150
 fca_err = fpCA(K, max_rank)
+fca_err2 = fpCA(K2, max_rank)
 ppca_err = ppCA(K, max_rank)
-ppca_adapt_err = ppCA_adaptive(K, max_rank, epsilon=1e-12)
+ppca_err2 = ppCA(K2, max_rank)
+ppca_adapt_err = ppCA_adaptive(K, max_rank)
+ppca_adapt_err2 = ppCA_adaptive(K2, max_rank)
+
 
 r = min(len(fca_err), max_rank)
 svd_err = svd_error(K, r)
+svd_err2 = svd_error(K2, r)
 
 plt.figure(figsize=(8, 5))
 plt.semilogy(range(1, r+1), svd_err, label="SVD")
-plt.semilogy(range(1, len(fca_err)+1), fca_err, label="FCA")
+plt.semilogy(range(1, len(fca_err)+1), fca_err, label="fCA")
 plt.semilogy(range(1, len(ppca_err)+1), ppca_err, label="ppCA")
 plt.semilogy(range(1, len(ppca_adapt_err)+1), ppca_adapt_err, label="ppCA adaptive")
-plt.title("Iris kernel matrix approximation")
+plt.title("Iris kernel matrix approximation with Gaussian kernel")
 plt.xlabel("Rank")
 plt.ylabel("Relative Frobenius error")
 plt.legend()
 plt.grid(True)
 plt.show()
+
+plt.figure(figsize=(8, 5))
+plt.semilogy(range(1, r+1), svd_err2, label="SVD")
+plt.semilogy(range(1, len(fca_err2)+1), fca_err2, label="fCA")
+plt.semilogy(range(1, len(ppca_err2)+1), ppca_err2, label="ppCA")       
+plt.semilogy(range(1, len(ppca_adapt_err2)+1), ppca_adapt_err2, label="ppCA adaptive")
+plt.title("Iris kernel matrix approximation with linear kernel")
+plt.xlabel("Rank")
+plt.ylabel("Relative Frobenius error")
+plt.legend()
+plt.grid(True)
+plt.show()
+
 
 A1, A2, A3 = generate_test_matrices()
 
@@ -253,7 +275,7 @@ for i, A in enumerate([A1, A2, A3], start=1):
 
     plt.figure(figsize=(8, 5))
     plt.semilogy(range(1, r+1), svd_err, label="SVD")
-    plt.semilogy(range(1, len(fca_err)+1), fca_err, label="FCA")
+    plt.semilogy(range(1, len(fca_err)+1), fca_err, label="fCA")
     plt.semilogy(range(1, len(ppca_err)+1), ppca_err, label="ppCA")
     plt.semilogy(range(1, len(ppca_adapt_err)+1), ppca_adapt_err, label="ppCA adaptive")
     plt.title(f"Test matrix A{i}")
