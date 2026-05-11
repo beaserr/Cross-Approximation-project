@@ -284,3 +284,19 @@ for i, A in enumerate([A1, A2, A3], start=1):
     plt.legend()
     plt.grid(True)
     plt.show()
+
+
+def K_func(i, j):
+    diff = X[i] - X[j]
+    return np.exp(-np.dot(diff, diff) / ( sigma ** 2))
+
+errors = func_ppca( K_func, m=X.shape[0], n=X.shape[0], max_rank=10,psilon=1e-12)
+
+
+plt.figure()
+plt.plot(range(1, len(errors) + 1), errors, marker='o')
+plt.xlabel("Iteration")
+plt.ylabel("Error")
+plt.title("Kernel Approximation with function")
+plt.grid(True)
+plt.show()
