@@ -21,5 +21,5 @@ def gaussian_kernel(x, y, sigma=1.0):
 def gaussian_kernel_matrix(X, sigma=1.0):
     X = np.asarray(X, dtype=float)
     s = np.sum(X * X, axis=1, keepdims=True)
-    d2 = s + s.T - (X @ X.T)
-    return np.exp(- d2 / (sigma ** 2))
+    d2 = s + s.T - 2.0 * (X @ X.T)
+    return np.exp(-np.maximum(d2, 0.0) / (2.0 * sigma ** 2))
