@@ -29,9 +29,7 @@ from synthetic import generate_test_matrices
 PLOT_DIR = Path("plots")
 
 
-# ============================================================
-# Plot helpers
-# ============================================================
+
 
 def save_current_figure(filename, output_dir=PLOT_DIR):
     """Save the current Matplotlib figure as a PDF and close it."""
@@ -44,7 +42,7 @@ def save_current_figure(filename, output_dir=PLOT_DIR):
     return path
 
 
-def save_error_plot(filename, title, curves, output_dir=PLOT_DIR):
+def save_error_plot(filename, title, curves, output_dir=PLOT_DIR, max_display_rank=None):
     """Save a semilog plot containing any number of error curves."""
     plt.figure(figsize=(8, 5))
 
@@ -54,6 +52,9 @@ def save_error_plot(filename, title, curves, output_dir=PLOT_DIR):
         if len(errors) == 0:
             print(f"Warning: empty error curve for {label}; skipping it in {filename}")
             continue
+
+        if max_display_rank is not None:
+            errors = errors[:max_display_rank]
 
         plt.semilogy(range(1, len(errors) + 1), errors, label=label)
 
@@ -65,11 +66,11 @@ def save_error_plot(filename, title, curves, output_dir=PLOT_DIR):
     return save_current_figure(filename, output_dir)
 
 
-# ============================================================
-# Standard experiments: SVD, fpCA, ppCA, adaptive ppCA
-# ============================================================
+# tests fucntions
 
-def plot_standard_error_curves(title, filename, svd_err, fca_err, ppca_err, ppca_adapt_err, output_dir=PLOT_DIR):
+def plot_standard_error_curves(title, filename, svd_err, fca_err, ppca_err, output_dir=PLOT_DIR):
+    max_display_rank = max(1, len(fca_err), len(ppca_err))
+
     return save_error_plot(
         filename,
         title,
@@ -77,14 +78,14 @@ def plot_standard_error_curves(title, filename, svd_err, fca_err, ppca_err, ppca
             ("SVD", svd_err),
             ("fpCA", fca_err),
             ("ppCA", ppca_err),
-            ("ppCA adaptive", ppca_adapt_err),
         ],
         output_dir,
+        max_display_rank=max_display_rank,
     )
 
 
 def run_matrix_experiment(name, A, max_rank, output_filename, output_dir=PLOT_DIR):
-    """Run fpCA, ppCA, adaptive ppCA, and SVD comparison for one matrix."""
+    """Run fpCA, ppCA, and SVD comparison for one matrix."""
     print(f"\n{name}, size {A.shape}")
 
     fca_U, fca_V, fca_time = time_approximation(fpCA_approx, A, max_rank)
@@ -92,8 +93,6 @@ def run_matrix_experiment(name, A, max_rank, output_filename, output_dir=PLOT_DI
 
     fca_err, fca_error_time = time_error_analysis(fpCA_error_analysis, A, fca_U, fca_V)
     ppca_err, ppca_error_time = time_error_analysis(ppCA_error_analysis, A, ppca_U, ppca_V)
-    ppca_adapt_err = ppCA_adaptive(A, max_rank, epsilon=1e-12)
-
     print(f"fpCA approximation time: {fca_time:.4f} seconds")
     print(f"fpCA error analysis time: {fca_error_time:.4f} seconds")
     print(f"ppCA approximation time: {ppca_time:.4f} seconds")
@@ -108,24 +107,39 @@ def run_matrix_experiment(name, A, max_rank, output_filename, output_dir=PLOT_DI
         svd_err=svd_err_values,
         fca_err=fca_err,
         ppca_err=ppca_err,
-        ppca_adapt_err=ppca_adapt_err,
         output_dir=output_dir,
     )
     print(f"Saved plot to {path}")
 
 
-# ============================================================
-# New experiments: random pivots and natural diagonal pivots
-# ============================================================
+def run_adaptive_experiment(name, A, max_rank, output_filename, output_dir=PLOT_DIR):
+    """Run only the adaptive ppCA curve."""
+    print(f"\n{name}: adaptive ppCA, size {A.shape}")
 
-def run_random_and_natural_experiment(name, A, max_rank, output_filename, output_dir=PLOT_DIR, seed=0):
-    """
-    Compare the usual methods with the new experimental pivoting rules:
-    uniform random ppCA, magnitude-weighted random ppCA, and natural diagonal pivots.
-    """
+    ppca_adapt_err = ppCA_adaptive(A, max_rank, epsilon=1e-12)
+    path = save_error_plot(
+        output_filename,
+        f"Adaptive ppCA: {name}",
+        [("ppCA adaptive", ppca_adapt_err)],
+        output_dir,
+    )
+    print(f"Saved plot to {path}")
+
+
+#Other pivoting methods
+
+def run_random_and_natural_experiment(
+    name,
+    A,
+    max_rank,
+    output_filename,
+    output_dir=PLOT_DIR,
+    seed=0,
+    max_display_rank=40,
+):
+    
     print(f"\n{name}: random and natural pivoting, size {A.shape}")
 
-    fca_U, fca_V, fca_time = time_approximation(fpCA_approx, A, max_rank)
     ppca_U, ppca_V, ppca_time = time_approximation(ppCA_approx, A, max_rank)
 
     uniform_U, uniform_V, uniform_time = time_approximation(
@@ -152,7 +166,6 @@ def run_random_and_natural_experiment(name, A, max_rank, output_filename, output
         max_rank,
     )
 
-    fca_err, _ = time_error_analysis(fpCA_error_analysis, A, fca_U, fca_V)
     ppca_err, _ = time_error_analysis(ppCA_error_analysis, A, ppca_U, ppca_V)
     uniform_err, _ = time_error_analysis(ppCA_error_analysis, A, uniform_U, uniform_V)
     weighted_err, _ = time_error_analysis(ppCA_error_analysis, A, weighted_U, weighted_V)
@@ -162,7 +175,6 @@ def run_random_and_natural_experiment(name, A, max_rank, output_filename, output
     r = min(max_rank, A.shape[0], A.shape[1])
     svd_err_values = svd_error(A, r)
 
-    print(f"fpCA approximation time: {fca_time:.4f} seconds")
     print(f"ppCA approximation time: {ppca_time:.4f} seconds")
     print(f"random uniform ppCA time: {uniform_time:.4f} seconds")
     print(f"random weighted ppCA, alpha=1, time: {weighted_time:.4f} seconds")
@@ -174,7 +186,6 @@ def run_random_and_natural_experiment(name, A, max_rank, output_filename, output
         f"Random and natural pivoting: {name}",
         [
             ("SVD", svd_err_values),
-            ("fpCA", fca_err),
             ("ppCA", ppca_err),
             ("random uniform ppCA", uniform_err),
             ("random weighted ppCA alpha=1", weighted_err),
@@ -182,12 +193,13 @@ def run_random_and_natural_experiment(name, A, max_rank, output_filename, output
             ("natural pivots + diagonal noise", natural_err),
         ],
         output_dir,
+        max_display_rank=max_display_rank,
     )
     print(f"Saved plot to {path}")
+    return [uniform_err, weighted_err, weighted2_err, natural_err]
 
 
 def average_random_errors(method, A, max_rank, n_runs=10):
-    """Compute mean, min, and max error curves over several random seeds."""
     all_errors = []
 
     for seed in range(n_runs):
@@ -252,13 +264,39 @@ def run_averaged_random_experiment(name, A, max_rank, output_filename, output_di
             ("weighted random alpha=2 mean", weighted2_mean),
         ],
         output_dir,
+        max_display_rank=min(40, max_rank),
     )
     print(f"Saved plot to {path}")
 
 
-# ============================================================
-# Main experiment groups
-# ============================================================
+def save_mean_of_curves_plot(name, curve_groups, output_filename, output_dir=PLOT_DIR, max_display_rank=40):
+    """Save one average curve over all previously computed non-standard pivot curves."""
+    curves = []
+
+    for group in curve_groups:
+        for errors in group:
+            errors = np.asarray(errors)
+
+            if len(errors) > 0:
+                curves.append(errors)
+
+    if len(curves) == 0:
+        print(f"Warning: no curves available for the mean plot {output_filename}")
+        return None
+
+    min_len = min(len(errors) for errors in curves)
+    mean_curve = np.mean(np.array([errors[:min_len] for errors in curves]), axis=0)
+
+    path = save_error_plot(
+        output_filename,
+        f"Mean curve over other pivoting methods: {name}",
+        [("mean over other pivoting methods", mean_curve)],
+        output_dir,
+        max_display_rank=max_display_rank,
+    )
+    print(f"Saved plot to {path}")
+    return path
+
 
 def run_iris_experiments(output_dir=PLOT_DIR):
     X = load_iris_data()
@@ -274,6 +312,13 @@ def run_iris_experiments(output_dir=PLOT_DIR):
         "iris_gaussian_kernel.pdf",
         output_dir,
     )
+    run_adaptive_experiment(
+        "Iris kernel matrix approximation with Gaussian kernel",
+        K_gaussian,
+        max_rank,
+        "adaptive_iris_gaussian_kernel.pdf",
+        output_dir,
+    )
 
     run_matrix_experiment(
         "Iris kernel matrix approximation with linear kernel",
@@ -282,20 +327,11 @@ def run_iris_experiments(output_dir=PLOT_DIR):
         "iris_linear_kernel.pdf",
         output_dir,
     )
-
-    run_random_and_natural_experiment(
-        "Iris Gaussian kernel",
-        K_gaussian,
-        max_rank,
-        "random_natural_iris_gaussian_kernel.pdf",
-        output_dir,
-    )
-
-    run_random_and_natural_experiment(
-        "Iris linear kernel",
+    run_adaptive_experiment(
+        "Iris kernel matrix approximation with linear kernel",
         K_linear,
         max_rank,
-        "random_natural_iris_linear_kernel.pdf",
+        "adaptive_iris_linear_kernel.pdf",
         output_dir,
     )
 
@@ -303,9 +339,9 @@ def run_iris_experiments(output_dir=PLOT_DIR):
 def run_synthetic_experiments(output_dir=PLOT_DIR):
     n_big = 1000
     max_rank_big = 150
-    A1, A2, A3 = generate_test_matrices(n=n_big, seed=0)
+    A1, A2, _ = generate_test_matrices(n=n_big, seed=0)
 
-    for i, A in enumerate([A1, A2, A3], start=1):
+    for i, A in enumerate([A1, A2], start=1):
         run_matrix_experiment(
             f"Synthetic test matrix A{i}, n={n_big}",
             A,
@@ -313,31 +349,37 @@ def run_synthetic_experiments(output_dir=PLOT_DIR):
             f"synthetic_A{i}.pdf",
             output_dir,
         )
+        run_adaptive_experiment(
+            f"Synthetic test matrix A{i}, n={n_big}",
+            A,
+            max_rank_big,
+            f"adaptive_synthetic_A{i}.pdf",
+            output_dir,
+        )
 
 
 def run_random_and_natural_synthetic_experiments(output_dir=PLOT_DIR):
-    """
-    Smaller synthetic experiments for the new pivoting rules.
-    We use n=300 here because repeated random tests are more expensive.
-    """
+
     n_exp = 300
     max_rank_exp = 80
-    A1, A2, A3 = generate_test_matrices(n=n_exp, seed=1)
+    A1, A2, _ = generate_test_matrices(n=n_exp, seed=1)
 
     matrices = [
         ("Synthetic A1 exponential decay", A1, "A1"),
         ("Synthetic A2 polynomial decay", A2, "A2"),
-        ("Synthetic A3 low-rank PSD noise", A3, "A3"),
     ]
 
+    all_other_pivot_curves = []
+
     for name, A, short_name in matrices:
-        run_random_and_natural_experiment(
+        curves = run_random_and_natural_experiment(
             name,
             A,
             max_rank_exp,
             f"random_natural_synthetic_{short_name}.pdf",
             output_dir,
         )
+        all_other_pivot_curves.append(curves)
 
     # A2 is a good case for averaging because polynomial decay is harder.
     run_averaged_random_experiment(
@@ -347,6 +389,13 @@ def run_random_and_natural_synthetic_experiments(output_dir=PLOT_DIR):
         "random_pivoting_average_synthetic_A2.pdf",
         output_dir,
         n_runs=20,
+    )
+
+    save_mean_of_curves_plot(
+        "Synthetic A1 and A2",
+        all_other_pivot_curves,
+        "other_pivoting_mean_synthetic_A1_A2.pdf",
+        output_dir,
     )
 
 
@@ -368,19 +417,13 @@ def run_california_experiment(output_dir=PLOT_DIR):
         "california_gaussian_kernel.pdf",
         output_dir,
     )
-
-    # Also test the new pivoting rules on a smaller California subset.
-    n_small = 300
-    K_small = gaussian_kernel_matrix(data.data[:n_small], sigma=1.0)
-
-    run_random_and_natural_experiment(
-        f"California housing Gaussian kernel, n={n_small}",
-        K_small,
-        max_rank=80,
-        output_filename="random_natural_california_gaussian_kernel.pdf",
-        output_dir=output_dir,
+    run_adaptive_experiment(
+        f"California housing Gaussian kernel matrix, n={n_data}",
+        K_big,
+        max_rank_big,
+        "adaptive_california_gaussian_kernel.pdf",
+        output_dir,
     )
-
 
 def run_matrix_free_experiment(output_dir=PLOT_DIR):
     np.random.seed(0)

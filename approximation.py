@@ -1,317 +1,208 @@
 import numpy as np
 
-# Approximation functions
-# These functions only compute U and V
 
-
-def fpCA_approx(A, max_rank, epsilon=1e-12):
-    m, n = A.shape
-    R = A.copy()
-    U = np.zeros((m, max_rank))
-    V = np.zeros((n, max_rank))
-
-    actual_rank = 0
-    for k in range(max_rank):
-        idx = np.argmax(np.abs(R))
-        i = idx // n
-        j = idx % n
-        piv = R[i, j]
-
-        if abs(piv) < epsilon:
-            break
-
-        u = R[:, j]
-        v = R[i, :] / piv
-
-        U[:, k] = u
-        V[:, k] = v
-
-        R -= np.outer(u, v)
-
-        actual_rank = k + 1
-
-    return U[:, :actual_rank], V[:, :actual_rank]
-
-
-def ppCA_approx(A, max_rank, epsilon=1e-12):
-    m, n = A.shape
-    U = np.zeros((m, max_rank))
-    V = np.zeros((n, max_rank))
-
-    pivot_row = np.random.randint(0, m)
-    actual_rank = 0
+def fpca(a, max_rank, eps=1e-12):
+    m, n = a.shape
+    r = a.copy()
+    u = np.zeros((m, max_rank))
+    v = np.zeros((n, max_rank))
+    rank = 0
 
     for k in range(max_rank):
-        b = A[pivot_row, :].copy()
+        i, j = np.unravel_index(np.argmax(np.abs(r)), r.shape)
+        pivot = r[i, j]
 
-        for mu in range(k):
-            b -= U[pivot_row, mu] * V[:, mu]
-
-        pivot_col = np.argmax(np.abs(b))
-        piv = b[pivot_col]
-
-        if abs(piv) < epsilon:
+        if abs(pivot) < eps:
             break
 
-        a = A[:, pivot_col].copy()
+        col = r[:, j]
+        row = r[i, :] / pivot
 
-        for mu in range(k):
-            a -= U[:, mu] * V[pivot_col, mu]
+        u[:, k] = col
+        v[:, k] = row
 
-        a /= piv
+        r = r - np.outer(col, row)
+        rank = k + 1
 
-        U[:, k] = a
-        V[:, k] = b
-
-        a_next = np.abs(a.copy())
-        a_next[pivot_row] = 0
-        pivot_row = np.argmax(a_next)
-
-        actual_rank = k + 1
-
-    return U[:, :actual_rank], V[:, :actual_rank]
+    return u[:, :rank], v[:, :rank]
 
 
-# Adaptive ppCA 
+def ppca(a, max_rank, eps=1e-12):
+    m, n = a.shape
+    u = np.zeros((m, max_rank))
+    v = np.zeros((n, max_rank))
+    row = 0
+    rank = 0
 
-def ppCA_adaptive(A, max_rank, epsilon=1e-12):
-    m, n = A.shape
-    U = np.zeros((m, max_rank))
-    V = np.zeros((n, max_rank))
+    for k in range(max_rank):
+        b = a[row, :].copy()
+
+        for i in range(k):
+            b = b - u[row, i] * v[:, i]
+
+        col = np.argmax(np.abs(b))
+        pivot = b[col]
+
+        if abs(pivot) < eps:
+            break
+
+        c = a[:, col].copy()
+
+        for i in range(k):
+            c = c - u[:, i] * v[col, i]
+
+        c = c / pivot
+
+        u[:, k] = c
+        v[:, k] = b
+
+        next_row = np.abs(c)
+        next_row[row] = 0
+        row = np.argmax(next_row)
+
+        rank = k + 1
+
+    return u[:, :rank], v[:, :rank]
+
+
+def ppca_error(a, max_rank, eps=1e-12):
     errors = []
-    pivot_row = np.random.randint(0, m)
+    norm = np.linalg.norm(a, "fro")
 
-    normA = np.linalg.norm(A, 'fro')
-    a1_norm = None
-    b1_norm = None
-
-    for k in range(max_rank):
-        b = A[pivot_row, :].copy()
-
-        for mu in range(k):
-            b -= U[pivot_row, mu] * V[:, mu]
-
-        pivot_col = np.argmax(np.abs(b))
-        piv = b[pivot_col]
-
-        if abs(piv) < epsilon:
-            break
-
-        a = A[:, pivot_col].copy()
-
-        for mu in range(k):
-            a -= U[:, mu] * V[pivot_col, mu]
-
-        a /= piv
-
-        U[:, k] = a
-        V[:, k] = b
-
-        S = U[:, :k + 1] @ V[:, :k + 1].T
-        err = np.linalg.norm(A - S, 'fro') / normA
-        errors.append(err)
-
-        if k == 0:
-            a1_norm = np.linalg.norm(a, 2)
-            b1_norm = np.linalg.norm(b, 2)
-
-        if np.linalg.norm(a, 2) * np.linalg.norm(b, 2) <= epsilon * a1_norm * b1_norm:
-            break
-
-        a_next = np.abs(a.copy())
-        a_next[pivot_row] = 0
-        pivot_row = np.argmax(a_next)
+    for k in range(1, max_rank + 1):
+        u, v = ppca(a, k, eps)
+        approx = u @ v.T
+        error = np.linalg.norm(a - approx, "fro") / norm
+        errors.append(error)
 
     return errors
 
 
-def func_ppca(A_func, m, n, max_rank, epsilon=1e-12):
-    U = np.zeros((m, max_rank))
-    V = np.zeros((n, max_rank))
-    errors = []
-    normA = np.sqrt(sum(A_func(i, j) ** 2 for i in range(m) for j in range(n)))
+def ppca_function(f, m, n, max_rank, eps=1e-12):
+    a = np.zeros((m, n))
 
-    pivot_row = 0
+    for i in range(m):
+        for j in range(n):
+            a[i, j] = f(i, j)
 
-    for k in range(max_rank):
-        b = np.array([A_func(pivot_row, j) for j in range(n)])
-
-        for mu in range(k):
-            b -= U[pivot_row, mu] * V[:, mu]
-
-        pivot_col = np.argmax(np.abs(b))
-        piv = b[pivot_col]
-
-        if abs(piv) < epsilon:
-            break
-
-        a = np.array([A_func(i, pivot_col) for i in range(m)])
-
-        for mu in range(k):
-            a -= U[:, mu] * V[pivot_col, mu]
-
-        a /= piv
-
-        U[:, k] = a
-        V[:, k] = b
-
-        a_next = np.abs(a.copy())
-        a_next[pivot_row] = 0
-        pivot_row = np.argmax(a_next)
-
-        S_err = 0
-
-        for i in range(m):
-            for j in range(n):
-                s = 0
-                for mu in range(k + 1):
-                    s += U[i, mu] * V[j, mu]
-                diff = A_func(i, j) - s
-                S_err += diff * diff
-
-        err = np.sqrt(S_err) / normA
-        errors.append(err)
-    return errors
+    return ppca_error(a, max_rank, eps)
 
 
-def func_ppca_adaptive(A_func, m, n, max_rank, epsilon=1e-12):
-    A = np.array([[A_func(i, j) for j in range(n)] for i in range(m)])
-    return ppCA_adaptive(A, max_rank, epsilon)
-
-
-
-# Randomized partial pivoting cross approximation
-
-
-def ppCA_random_uniform(A, max_rank, epsilon=1e-12, seed=0):
-    m, n = A.shape
-    U = np.zeros((m, max_rank))
-    V = np.zeros((n, max_rank))
-
+def random_ppca(a, max_rank, eps=1e-12, seed=0):
+    m, n = a.shape
+    u = np.zeros((m, max_rank))
+    v = np.zeros((n, max_rank))
     rng = np.random.default_rng(seed)
-    actual_rank = 0
+    rank = 0
+
     for k in range(max_rank):
-        pivot_row = rng.integers(0, m)
+        row = rng.integers(0, m)
+        b = a[row, :].copy()
 
-        b = A[pivot_row, :].copy()
-        for mu in range(k):
-            b -= U[pivot_row, mu] * V[:, mu]
+        for i in range(k):
+            b = b - u[row, i] * v[:, i]
 
-        possible_cols = np.where(np.abs(b) > epsilon)[0]
-        if len(possible_cols) == 0:
+        cols = np.where(np.abs(b) > eps)[0]
+
+        if len(cols) == 0:
             break
 
-        pivot_col = rng.choice(possible_cols)
-        piv = b[pivot_col]
-        if abs(piv) < epsilon:
+        col = rng.choice(cols)
+        pivot = b[col]
+
+        if abs(pivot) < eps:
             break
-        a = A[:, pivot_col].copy()
 
-        for mu in range(k):
-            a -= U[:, mu] * V[pivot_col, mu]
+        c = a[:, col].copy()
 
-        a /= piv
-        U[:, k] = a
-        V[:, k] = b
-        actual_rank = k + 1
+        for i in range(k):
+            c = c - u[:, i] * v[col, i]
 
-    return U[:, :actual_rank], V[:, :actual_rank]
+        c = c / pivot
+
+        u[:, k] = c
+        v[:, k] = b
+        rank = k + 1
+
+    return u[:, :rank], v[:, :rank]
 
 
-def ppCA_random_weighted(A, max_rank, epsilon=1e-12, seed=0, alpha=1.0):
-    m, n = A.shape
-    U = np.zeros((m, max_rank))
-    V = np.zeros((n, max_rank))
-
+def weighted_ppca(a, max_rank, eps=1e-12, seed=0):
+    m, n = a.shape
+    u = np.zeros((m, max_rank))
+    v = np.zeros((n, max_rank))
     rng = np.random.default_rng(seed)
-    pivot_row = rng.integers(0, m)
-    actual_rank = 0
+    row = rng.integers(0, m)
+    rank = 0
 
     for k in range(max_rank):
-        b = A[pivot_row, :].copy()
-        for mu in range(k):
-            b -= U[pivot_row, mu] * V[:, mu]
+        b = a[row, :].copy()
 
-        weights_col = np.abs(b) ** alpha
-        weights_col[weights_col < epsilon] = 0.0
+        for i in range(k):
+            b = b - u[row, i] * v[:, i]
 
-        total_col = np.sum(weights_col)
+        weights = np.abs(b)
+        weights[weights < eps] = 0
 
-        if total_col < epsilon:
+        if np.sum(weights) < eps:
             break
 
-        probabilities_col = weights_col / total_col
-        pivot_col = rng.choice(n, p=probabilities_col)
+        col = rng.choice(n, p=weights / np.sum(weights))
+        pivot = b[col]
 
-        piv = b[pivot_col]
-
-        if abs(piv) < epsilon:
-            break
-        a = A[:, pivot_col].copy()
-
-        for mu in range(k):
-            a -= U[:, mu] * V[pivot_col, mu]
-
-        a /= piv
-
-        U[:, k] = a
-        V[:, k] = b
-
-        weights_row = np.abs(a) ** alpha
-        weights_row[pivot_row] = 0.0
-        weights_row[weights_row < epsilon] = 0.0
-        total_row = np.sum(weights_row)
-
-        if total_row < epsilon:
+        if abs(pivot) < eps:
             break
 
-        probabilities_row = weights_row / total_row
-        pivot_row = rng.choice(m, p=probabilities_row)
-        actual_rank = k + 1
+        c = a[:, col].copy()
 
-    return U[:, :actual_rank], V[:, :actual_rank]
+        for i in range(k):
+            c = c - u[:, i] * v[col, i]
+
+        c = c / pivot
+
+        u[:, k] = c
+        v[:, k] = b
+
+        weights = np.abs(c)
+        weights[row] = 0
+        weights[weights < eps] = 0
+
+        if np.sum(weights) < eps:
+            break
+
+        row = rng.choice(m, p=weights / np.sum(weights))
+        rank = k + 1
+
+    return u[:, :rank], v[:, :rank]
 
 
-# Natural pivoting cross approximation
-# A small diagonal noise is added to avoid zero pivots.
-
-
-def natural_CA_diagonal_noise(A, max_rank, epsilon=1e-12, diagonal_noise=1e-14):
-    m, n = A.shape
+def natural_ppca(a, max_rank, eps=1e-12):
+    m, n = a.shape
     r = min(m, n, max_rank)
-
-    A_work = A.copy()
-
-    if diagonal_noise > 0:
-        scale = np.linalg.norm(A, 'fro') / np.sqrt(min(m, n))
-        A_work += diagonal_noise * scale * np.eye(m, n)
-
-    U = np.zeros((m, r))
-    V = np.zeros((n, r))
-
-    actual_rank = 0
+    u = np.zeros((m, r))
+    v = np.zeros((n, r))
+    rank = 0
 
     for k in range(r):
-        pivot_row = k
-        pivot_col = k
-        b = A_work[pivot_row, :].copy()
+        b = a[k, :].copy()
 
-        for mu in range(k):
-            b -= U[pivot_row, mu] * V[:, mu]
+        for i in range(k):
+            b = b - u[k, i] * v[:, i]
 
-        piv = b[pivot_col]
+        pivot = b[k]
 
-        if abs(piv) < epsilon:
+        if abs(pivot) < eps:
             break
 
-        a = A_work[:, pivot_col].copy()
+        c = a[:, k].copy()
 
-        for mu in range(k):
-            a -= U[:, mu] * V[pivot_col, mu]
+        for i in range(k):
+            c = c - u[:, i] * v[k, i]
 
-        a /= piv
-        U[:, k] = a
-        V[:, k] = b
-        actual_rank = k + 1
+        c = c / pivot
 
-    return U[:, :actual_rank], V[:, :actual_rank]
+        u[:, k] = c
+        v[:, k] = b
+        rank = k + 1
+
+    return u[:, :rank], v[:, :rank]
