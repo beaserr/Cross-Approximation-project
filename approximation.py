@@ -127,7 +127,7 @@ def random_ppca(a, max_rank, eps=1e-12, seed=0):
     return u[:, :rank], v[:, :rank]
 
 
-def weighted_ppca(a, max_rank, eps=1e-12, seed=0):
+def weighted_ppca(a, max_rank, eps=1e-12, seed=0, alpha=1.0):
     m, n = a.shape
     u = np.zeros((m, max_rank))
     v = np.zeros((n, max_rank))
@@ -141,7 +141,7 @@ def weighted_ppca(a, max_rank, eps=1e-12, seed=0):
         for i in range(k):
             b = b - u[row, i] * v[:, i]
 
-        weights = np.abs(b)
+        weights = np.abs(b) ** alpha
         weights[weights < eps] = 0
 
         if np.sum(weights) < eps:
@@ -163,7 +163,7 @@ def weighted_ppca(a, max_rank, eps=1e-12, seed=0):
         u[:, k] = c
         v[:, k] = b
 
-        weights = np.abs(c)
+        weights = np.abs(c) ** alpha
         weights[row] = 0
         weights[weights < eps] = 0
 
@@ -200,9 +200,81 @@ def natural_ppca(a, max_rank, eps=1e-12):
             c = c - u[:, i] * v[k, i]
 
         c = c / pivot
-
         u[:, k] = c
         v[:, k] = b
         rank = k + 1
 
     return u[:, :rank], v[:, :rank]
+
+
+def fpCA_approx(a, max_rank, epsilon=1e-12):
+    return fpca(a, max_rank, epsilon)
+
+
+def ppCA_approx(a, max_rank, epsilon=1e-12):
+    return ppca(a, max_rank, epsilon)
+
+
+def ppCA_random_uniform(a, max_rank, epsilon=1e-12, seed=0):
+    return random_ppca(a, max_rank, epsilon, seed)
+
+
+def ppCA_random_weighted(a, max_rank, epsilon=1e-12, seed=0, alpha=1.0):
+    return weighted_ppca(a, max_rank, epsilon, seed, alpha)
+
+
+def natural_CA_diagonal_noise(a, max_rank, epsilon=1e-12, diagonal_noise=1e-12):
+    noisy = a.copy()
+    r = min(noisy.shape)
+    noisy[np.arange(r), np.arange(r)] += diagonal_noise
+    return natural_ppca(noisy, max_rank, epsilon)
+
+
+def ppCA_adaptive(a, max_rank, epsilon=1e-12):
+    m, n = a.shape
+    u = np.zeros((m, max_rank))
+    v = np.zeros((n, max_rank))
+    errors = []
+    norm = np.linalg.norm(a, "fro")
+    row = 0
+    first_update_norm = None
+
+    for k in range(max_rank):
+        b = a[row, :].copy()
+
+        for i in range(k):
+            b = b - u[row, i] * v[:, i]
+
+        col = np.argmax(np.abs(b))
+        pivot = b[col]
+
+        if abs(pivot) < epsilon:
+            break
+
+        c = a[:, col].copy()
+
+        for i in range(k):
+            c = c - u[:, i] * v[col, i]
+
+        c = c / pivot
+        u[:, k] = c
+        v[:, k] = b
+
+        approx = u[:, : k + 1] @ v[:, : k + 1].T
+        errors.append(np.linalg.norm(a - approx, "fro") / norm)
+
+        update_norm = np.linalg.norm(c, 2) * np.linalg.norm(b, 2)
+        if k == 0:
+            first_update_norm = update_norm
+        elif update_norm <= epsilon * first_update_norm:
+            break
+
+        next_row = np.abs(c)
+        next_row[row] = 0
+        row = np.argmax(next_row)
+
+    return errors
+
+
+def func_ppca(f, m, n, max_rank, epsilon=1e-12):
+    return ppca_function(f, m, n, max_rank, epsilon)
