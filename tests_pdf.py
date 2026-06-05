@@ -6,6 +6,7 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
 from sklearn.datasets import fetch_california_housing
+from sklearn.preprocessing import StandardScaler
 
 from approximation import fpCA_approx, func_ppca, ppCA_adaptive, ppCA_approx
 from data import gaussian_kernel_matrix, kernel_matrix, load_iris_data
@@ -118,15 +119,16 @@ def run_synthetic_experiments(output_dir=PLOT_DIR):
 
 
 def run_california_experiment(output_dir=PLOT_DIR):
-    max_rank_big = 150
+    max_rank_big = 250
     n_data = 1000
 
     data = fetch_california_housing()
-    X_big = data.data[:n_data]
-    K_big = gaussian_kernel_matrix(X_big, sigma=1.0)
+    X_big = StandardScaler().fit_transform(data.data[:n_data].astype(float))
+    sigma = np.sqrt(X_big.shape[1])
+    K_big = gaussian_kernel_matrix(X_big, sigma=sigma)
 
     run_matrix_experiment(
-        f"California housing Gaussian kernel matrix, n={n_data}",
+        f"California housing scaled Gaussian kernel matrix, n={n_data}, sigma=sqrt(d)",
         K_big,
         max_rank_big,
         "california_gaussian_kernel.pdf",

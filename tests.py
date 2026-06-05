@@ -215,16 +215,18 @@ def pivots(output=output):
 
 def california(output=output):
     from sklearn.datasets import fetch_california_housing
+    from sklearn.preprocessing import StandardScaler
 
     n = 1000
-    max_rank = 150
+    max_rank = 250
 
     data = fetch_california_housing()
-    x = data.data[:n]
-    k = gaussian_kernel_matrix(x, sigma=1.0)
+    x = StandardScaler().fit_transform(data.data[:n].astype(float))
+    sigma = np.sqrt(x.shape[1])
+    k = gaussian_kernel_matrix(x, sigma=sigma)
 
-    test_matrix("california", k, max_rank, "california.pdf", output)
-    test_adaptive("california adaptive", k, max_rank, "california_adaptive.pdf", output)
+    test_matrix("california scaled gaussian", k, max_rank, "california.pdf", output)
+    test_adaptive("california scaled gaussian adaptive", k, max_rank, "california_adaptive.pdf", output)
 
 
 def matrix_free(output=output):
