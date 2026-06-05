@@ -13,6 +13,7 @@ output = Path("plots")
 
 
 def save_plot(filename, output=output):
+    # Save each figure as a PDF.
     output = Path(output)
     output.mkdir(parents=True, exist_ok=True)
     plt.tight_layout()
@@ -21,10 +22,11 @@ def save_plot(filename, output=output):
 
 
 def plot_errors(filename, title, curves, output=output, max_rank=None):
+    # Standard error plot.
     plt.figure(figsize=(8, 5))
 
     for label, errors in curves:
-        errors = np.asarray(errors)
+        errors = np.asarray(errors, dtype=float)
 
         if len(errors) == 0:
             continue
@@ -32,22 +34,24 @@ def plot_errors(filename, title, curves, output=output, max_rank=None):
         if max_rank is not None:
             errors = errors[:max_rank]
 
+        errors = np.maximum(errors, np.finfo(float).tiny)
         plt.semilogy(range(1, len(errors) + 1), errors, label=label)
 
     plt.title(title)
-    plt.xlabel("rank")
-    plt.ylabel("error")
+    plt.xlabel("Rank")
+    plt.ylabel("Relative Frobenius Error")
     plt.legend()
-    plt.grid(True)
+    plt.grid(True, which="both")
     save_plot(filename, output)
 
 
 def plot_three(title, filename, svd_err, fca_err, ppca_err, output=output):
     max_rank = max(1, len(fca_err), len(ppca_err))
-    plot_errors(filename, title, [("svd", svd_err), ("fpca", fca_err), ("ppca", ppca_err)], output, max_rank)
+    plot_errors(filename, title, [("SVD", svd_err), ("fpCA", fca_err), ("ppCA", ppca_err)], output, max_rank)
 
 
 def test_matrix(name, a, max_rank, filename, output=output):
+    # Compare fpCA, ppCA, and SVD.
     print(name)
 
     fca_u, fca_v, fca_time = time_approximation(fpCA_approx, a, max_rank)
@@ -71,23 +75,22 @@ def test_adaptive(name, a, max_rank, filename, output=output):
     print(name)
 
     errors = ppCA_adaptive(a, max_rank, epsilon=1e-12)
-    plot_errors(filename, name, [("adaptive ppca", errors)], output)
+    plot_errors(filename, name, [("Adaptive ppCA", errors)], output)
 
 
 def test_pivots(name, a, max_rank, filename, output=output, seed=0):
+    # Compare pivoting strategies.
     print(name)
 
     ppca_u, ppca_v, ppca_time = time_approximation(ppCA_approx, a, max_rank)
 
     uniform_u, uniform_v, uniform_time = time_approximation(lambda b, r, eps: ppCA_random_uniform(b, r, eps, seed=seed), a, max_rank)
     weighted_u, weighted_v, weighted_time = time_approximation(lambda b, r, eps: ppCA_random_weighted(b, r, eps, seed=seed, alpha=1.0), a, max_rank)
-    weighted2_u, weighted2_v, weighted2_time = time_approximation(lambda b, r, eps: ppCA_random_weighted(b, r, eps, seed=seed, alpha=2.0), a, max_rank)
     natural_u, natural_v, natural_time = time_approximation(lambda b, r, eps: natural_CA_diagonal_noise(b, r, eps, diagonal_noise=1e-12), a, max_rank)
 
     ppca_err, _ = time_error_analysis(ppCA_error_analysis, a, ppca_u, ppca_v)
     uniform_err, _ = time_error_analysis(ppCA_error_analysis, a, uniform_u, uniform_v)
     weighted_err, _ = time_error_analysis(ppCA_error_analysis, a, weighted_u, weighted_v)
-    weighted2_err, _ = time_error_analysis(ppCA_error_analysis, a, weighted2_u, weighted2_v)
     natural_err, _ = time_error_analysis(ppCA_error_analysis, a, natural_u, natural_v)
 
     r = min(max_rank, a.shape[0], a.shape[1])
@@ -96,52 +99,44 @@ def test_pivots(name, a, max_rank, filename, output=output, seed=0):
     print(f"ppca time: {ppca_time:.4f}")
     print(f"uniform time: {uniform_time:.4f}")
     print(f"weighted time: {weighted_time:.4f}")
-    print(f"weighted 2 time: {weighted2_time:.4f}")
     print(f"natural time: {natural_time:.4f}")
 
-    plot_errors(
-        filename,
-        name,
-        [
-            ("svd", svd_err),
-            ("ppca", ppca_err),
-            ("uniform", uniform_err),
-            ("weighted", weighted_err),
-            ("weighted 2", weighted2_err),
-            ("natural", natural_err),
-        ],
-        output,
-        40,
-    )
-
-    return [uniform_err, weighted_err, weighted2_err, natural_err]
+    plot_errors(filename, name, [("SVD", svd_err), ("ppCA", ppca_err), ("Uniform random", uniform_err), ("Weighted random", weighted_err), ("Natural", natural_err)], output, max_rank)
 
 
-def average_errors(method, a, max_rank, runs=10):
+def randomized_error_stats(method, a, max_rank, runs=20):
+    # Repeat randomized methods over several seeds.
     all_errors = []
 
     for seed in range(runs):
         u, v = method(a, max_rank, seed)
-        errors = ppCA_error_analysis(a, u, v)
+        errors = np.asarray(ppCA_error_analysis(a, u, v), dtype=float)
+
+        errors = errors[np.isfinite(errors)]
+        errors = np.maximum(errors, np.finfo(float).tiny)
 
         if len(errors) > 0:
             all_errors.append(errors)
 
     if len(all_errors) == 0:
-        return np.array([])
+        empty = np.array([])
+        return empty, empty, empty
 
     min_len = min(len(errors) for errors in all_errors)
     all_errors = np.array([errors[:min_len] for errors in all_errors])
 
-    return np.mean(all_errors, axis=0)
+    mean = np.mean(all_errors, axis=0)
+    q25 = np.percentile(all_errors, 25, axis=0)
+    q75 = np.percentile(all_errors, 75, axis=0)
+
+    return mean, q25, q75
 
 
 def test_average(name, a, max_rank, filename, output=output, runs=20):
     print(name)
 
-    uniform = average_errors(lambda b, r, seed: ppCA_random_uniform(b, r, seed=seed), a, max_rank, runs)
-    weighted = average_errors(lambda b, r, seed: ppCA_random_weighted(b, r, seed=seed, alpha=1.0), a, max_rank, runs)
-    weighted2 = average_errors(lambda b, r, seed: ppCA_random_weighted(b, r, seed=seed, alpha=2.0), a, max_rank, runs)
+    uniform_mean, _, _ = randomized_error_stats(lambda b, r, seed: ppCA_random_uniform(b, r, seed=seed), a, max_rank, runs)
+    weighted_mean, _, _ = randomized_error_stats(lambda b, r, seed: ppCA_random_weighted(b, r, seed=seed, alpha=1.0), a, max_rank, runs)
 
     ppca_u, ppca_v = ppCA_approx(a, max_rank)
     ppca_err = ppCA_error_analysis(a, ppca_u, ppca_v)
@@ -149,53 +144,91 @@ def test_average(name, a, max_rank, filename, output=output, runs=20):
     r = min(max_rank, a.shape[0], a.shape[1])
     svd_err = svd_error(a, r)
 
-    plot_errors(filename, name, [("svd", svd_err), ("ppca", ppca_err), ("uniform", uniform), ("weighted", weighted), ("weighted 2", weighted2)], output, 40)
+    if len(uniform_mean) > 0:
+        print(f"Uniform random pivoting mean error: {uniform_mean[-1]:.4e}")
+    if len(weighted_mean) > 0:
+        print(f"Weighted random pivoting mean error: {weighted_mean[-1]:.4e}")
+
+    plot_errors(filename, name, [("SVD", svd_err), ("ppCA", ppca_err), ("Uniform mean", uniform_mean), ("Weighted mean", weighted_mean)], output, max_rank)
 
 
-def test_mean(name, groups, filename, output=output):
-    curves = []
+def test_error_bars(name, a, max_rank, filename, output=output, runs=20):
+    # Show variability of randomized pivoting.
+    print(name)
 
-    for group in groups:
-        for errors in group:
-            errors = np.asarray(errors)
+    uniform_mean, uniform_q25, uniform_q75 = randomized_error_stats(lambda b, r, seed: ppCA_random_uniform(b, r, seed=seed), a, max_rank, runs)
+    weighted_mean, weighted_q25, weighted_q75 = randomized_error_stats(lambda b, r, seed: ppCA_random_weighted(b, r, seed=seed, alpha=1.0), a, max_rank, runs)
 
-            if len(errors) > 0:
-                curves.append(errors)
+    plt.figure(figsize=(8, 5))
 
-    if len(curves) == 0:
-        return
+    for label, mean, q25, q75 in [("Uniform", uniform_mean, uniform_q25, uniform_q75), ("Weighted", weighted_mean, weighted_q25, weighted_q75)]:
+        if len(mean) == 0:
+            continue
 
-    min_len = min(len(errors) for errors in curves)
-    mean = np.mean(np.array([errors[:min_len] for errors in curves]), axis=0)
+        step = max(1, len(mean) // 8)
+        indices = np.arange(0, len(mean), step)
+        ranks = indices + 1
 
-    plot_errors(filename, name, [("mean", mean)], output, 40)
+        y = np.maximum(mean[indices], np.finfo(float).tiny)
+        y_low = np.maximum(q25[indices], np.finfo(float).tiny)
+        y_high = np.maximum(q75[indices], y_low * (1.0 + 1e-12))
+
+        lower = np.maximum(y - y_low, 0.0)
+        upper = np.maximum(y_high - y, 0.0)
+
+        plt.errorbar(ranks, y, yerr=[lower, upper], marker="o", capsize=3, label=label)
+
+    plt.yscale("log")
+    plt.title(name)
+    plt.xlabel("Rank")
+    plt.ylabel("Relative Frobenius Error")
+    plt.legend(title="Method")
+    plt.grid(True, which="both")
+    save_plot(filename, output)
+
+
+def test_mean_pivots(name, a, max_rank, filename, output=output, runs=20):
+    print(name)
+
+    uniform_mean, _, _ = randomized_error_stats(lambda b, r, seed: ppCA_random_uniform(b, r, seed=seed), a, max_rank, runs)
+    weighted_mean, _, _ = randomized_error_stats(lambda b, r, seed: ppCA_random_weighted(b, r, seed=seed, alpha=1.0), a, max_rank, runs)
+
+    natural_u, natural_v = natural_CA_diagonal_noise(a, max_rank, epsilon=1e-12, diagonal_noise=1e-12)
+    natural_err = ppCA_error_analysis(a, natural_u, natural_v)
+
+    plot_errors(filename, name, [("Uniform mean", uniform_mean), ("Weighted mean", weighted_mean), ("Natural", natural_err)], output, max_rank)
 
 
 def iris(output=output):
-    x = load_iris_data()
+    # Real data test.
+    from sklearn.preprocessing import StandardScaler
+
+    x = StandardScaler().fit_transform(load_iris_data().astype(float))
+    sigma = np.sqrt(x.shape[1])
     max_rank = 150
 
-    k1 = gaussian_kernel_matrix(x, sigma=1.0)
+    k1 = gaussian_kernel_matrix(x, sigma=sigma)
     k2 = kernel_matrix(x)
 
-    test_matrix("iris gaussian", k1, max_rank, "iris_gaussian.pdf", output)
-    test_adaptive("iris gaussian adaptive", k1, max_rank, "iris_gaussian_adaptive.pdf", output)
+    test_matrix("Iris Gaussian", k1, max_rank, "iris_gaussian.pdf", output)
+    test_adaptive("Iris Gaussian Adaptive", k1, max_rank, "iris_gaussian_adaptive.pdf", output)
 
-    test_matrix("iris linear", k2, max_rank, "iris_linear.pdf", output)
-    test_adaptive("iris linear adaptive", k2, max_rank, "iris_linear_adaptive.pdf", output)
+    test_matrix("Iris Linear", k2, max_rank, "iris_linear.pdf", output)
+    test_adaptive("Iris Linear Adaptive", k2, max_rank, "iris_linear_adaptive.pdf", output)
 
 
 def synthetic(output=output):
+    # Artificial matrix tests.
     n = 1000
-    max_rank = 150
+    max_rank = 250
 
     a1, a2, _ = generate_test_matrices(n=n, seed=0)
 
-    test_matrix("synthetic a1", a1, max_rank, "synthetic_a1.pdf", output)
-    test_adaptive("synthetic a1 adaptive", a1, max_rank, "synthetic_a1_adaptive.pdf", output)
+    test_matrix("Synthetic A1", a1, max_rank, "synthetic_a1.pdf", output)
+    test_adaptive("Synthetic A1 Adaptive", a1, max_rank, "synthetic_a1_adaptive.pdf", output)
 
-    test_matrix("synthetic a2", a2, max_rank, "synthetic_a2.pdf", output)
-    test_adaptive("synthetic a2 adaptive", a2, max_rank, "synthetic_a2_adaptive.pdf", output)
+    test_matrix("Synthetic A2", a2, max_rank, "synthetic_a2.pdf", output)
+    test_adaptive("Synthetic A2 Adaptive", a2, max_rank, "synthetic_a2_adaptive.pdf", output)
 
 
 def pivots(output=output):
@@ -204,16 +237,16 @@ def pivots(output=output):
 
     a1, a2, _ = generate_test_matrices(n=n, seed=1)
 
-    curves = []
+    test_pivots("Pivots A1", a1, max_rank, "pivots_a1.pdf", output)
+    test_pivots("Pivots A2", a2, max_rank, "pivots_a2.pdf", output)
 
-    curves.append(test_pivots("pivots a1", a1, max_rank, "pivots_a1.pdf", output))
-    curves.append(test_pivots("pivots a2", a2, max_rank, "pivots_a2.pdf", output))
-
-    test_average("average a2", a2, max_rank, "average_a2.pdf", output)
-    test_mean("mean pivots", curves, "mean_pivots.pdf", output)
+    test_average("Average A2", a2, max_rank, "average_a2.pdf", output)
+    test_error_bars("Random Pivot Error Bars A2", a2, max_rank, "random_pivot_error_bars_a2.pdf", output)
+    test_mean_pivots("Mean Pivots A2", a2, max_rank, "mean_pivots.pdf", output)
 
 
 def california(output=output):
+    # Larger real data test.
     from sklearn.datasets import fetch_california_housing
     from sklearn.preprocessing import StandardScaler
 
@@ -225,8 +258,8 @@ def california(output=output):
     sigma = np.sqrt(x.shape[1])
     k = gaussian_kernel_matrix(x, sigma=sigma)
 
-    test_matrix("california scaled gaussian", k, max_rank, "california.pdf", output)
-    test_adaptive("california scaled gaussian adaptive", k, max_rank, "california_adaptive.pdf", output)
+    test_matrix("California Scaled Gaussian", k, max_rank, "california.pdf", output)
+    test_adaptive("California Scaled Gaussian Adaptive", k, max_rank, "california_adaptive.pdf", output)
 
 
 def matrix_free(output=output):
@@ -240,12 +273,12 @@ def matrix_free(output=output):
     errors = func_ppca(k, m=x.shape[0], n=x.shape[0], max_rank=10, epsilon=1e-12)
 
     plt.figure(figsize=(8, 5))
-    plt.semilogy(range(1, len(errors) + 1), errors, marker="o", label="ppca")
-    plt.xlabel("rank")
-    plt.ylabel("error")
-    plt.title("matrix free iris")
+    plt.semilogy(range(1, len(errors) + 1), errors, marker="o", label="ppCA")
+    plt.xlabel("Rank")
+    plt.ylabel("Relative Frobenius Error")
+    plt.title("Matrix Free Iris")
     plt.legend()
-    plt.grid(True)
+    plt.grid(True, which="both")
     save_plot("matrix_free_iris.pdf", output)
 
 
@@ -267,16 +300,17 @@ def forest(output=output):
     errors = func_ppca(k, m=n, n=n, max_rank=max_rank, epsilon=1e-12)
 
     plt.figure(figsize=(8, 5))
-    plt.semilogy(range(1, len(errors) + 1), errors, marker="o", label="ppca")
-    plt.xlabel("rank")
-    plt.ylabel("error")
-    plt.title("forest")
+    plt.semilogy(range(1, len(errors) + 1), errors, marker="o", label="ppCA")
+    plt.xlabel("Rank")
+    plt.ylabel("Relative Frobenius Error")
+    plt.title("Forest")
     plt.legend()
-    plt.grid(True)
+    plt.grid(True, which="both")
     save_plot("forest.pdf", output)
 
 
 def main(output=output):
+    # Run all experiments.
     iris(output)
     synthetic(output)
     california(output)

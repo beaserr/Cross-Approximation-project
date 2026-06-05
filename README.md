@@ -48,6 +48,7 @@ It compares them using the relative Frobenius error.
 ## Output
 
 The program creates PDF plots showing how the error changes with the rank.
+For randomized pivoting methods, the plots include the mean error and a shaded standard deviation band over several random seeds.
 
 ## Notes
 

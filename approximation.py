@@ -2,6 +2,7 @@ import numpy as np
 
 
 def fpca(a, max_rank, eps=1e-12):
+    # Full pivoting CA.
     m, n = a.shape
     r = a.copy()
     u = np.zeros((m, max_rank))
@@ -28,6 +29,7 @@ def fpca(a, max_rank, eps=1e-12):
 
 
 def ppca(a, max_rank, eps=1e-12):
+    # Partial pivoting CA.
     m, n = a.shape
     u = np.zeros((m, max_rank))
     v = np.zeros((n, max_rank))
@@ -66,6 +68,7 @@ def ppca(a, max_rank, eps=1e-12):
 
 
 def ppca_error(a, max_rank, eps=1e-12):
+    # Error curve for ppCA.
     errors = []
     norm = np.linalg.norm(a, "fro")
 
@@ -79,6 +82,7 @@ def ppca_error(a, max_rank, eps=1e-12):
 
 
 def ppca_function(f, m, n, max_rank, eps=1e-12):
+    # Build a matrix from entry access.
     a = np.zeros((m, n))
 
     for i in range(m):
@@ -89,6 +93,7 @@ def ppca_function(f, m, n, max_rank, eps=1e-12):
 
 
 def random_ppca(a, max_rank, eps=1e-12, seed=0):
+    # Random pivot selection.
     m, n = a.shape
     u = np.zeros((m, max_rank))
     v = np.zeros((n, max_rank))
@@ -128,6 +133,7 @@ def random_ppca(a, max_rank, eps=1e-12, seed=0):
 
 
 def weighted_ppca(a, max_rank, eps=1e-12, seed=0, alpha=1.0):
+    # Random pivots weighted by residual size.
     m, n = a.shape
     u = np.zeros((m, max_rank))
     v = np.zeros((n, max_rank))
@@ -177,6 +183,7 @@ def weighted_ppca(a, max_rank, eps=1e-12, seed=0, alpha=1.0):
 
 
 def natural_ppca(a, max_rank, eps=1e-12):
+    # Diagonal pivot order.
     m, n = a.shape
     r = min(m, n, max_rank)
     u = np.zeros((m, r))
@@ -224,6 +231,7 @@ def ppCA_random_weighted(a, max_rank, epsilon=1e-12, seed=0, alpha=1.0):
 
 
 def natural_CA_diagonal_noise(a, max_rank, epsilon=1e-12, diagonal_noise=1e-12):
+    # Avoid zero diagonal pivots.
     noisy = a.copy()
     r = min(noisy.shape)
     noisy[np.arange(r), np.arange(r)] += diagonal_noise
@@ -231,6 +239,7 @@ def natural_CA_diagonal_noise(a, max_rank, epsilon=1e-12, diagonal_noise=1e-12):
 
 
 def ppCA_adaptive(a, max_rank, epsilon=1e-12):
+    # Adaptive stopping rule.
     m, n = a.shape
     u = np.zeros((m, max_rank))
     v = np.zeros((n, max_rank))

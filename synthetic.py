@@ -2,6 +2,7 @@ import numpy as np
 
 
 def low_rank_psd_noise(n, R, xi, seed=0):
+    # Low-rank signal plus PSD noise.
     np.random.seed(seed)
     D = np.zeros(n)
     D[:R] = 1.0
@@ -12,6 +13,7 @@ def low_rank_psd_noise(n, R, xi, seed=0):
 
 
 def poly_decay_matrix(n, R, p):
+    # Polynomial singular value decay.
     diag = np.ones(n)
     for k in range(n - R):
         diag[R + k] = (k + 2) ** (-p)
@@ -19,6 +21,7 @@ def poly_decay_matrix(n, R, p):
 
 
 def exp_decay_matrix(n, R, q):
+    # Exponential singular value decay.
     diag = np.ones(n)
     for k in range(n - R):
         diag[R + k] = 10 ** (-(k + 1) * q)
@@ -26,6 +29,7 @@ def exp_decay_matrix(n, R, q):
 
 
 def generate_test_matrices(n=1000, seed=0):
+    # Rotate diagonal test matrices.
     np.random.seed(seed)
     U, _ = np.linalg.qr(np.random.rand(n, n))
     V, _ = np.linalg.qr(np.random.rand(n, n))

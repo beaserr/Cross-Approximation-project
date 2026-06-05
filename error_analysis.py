@@ -10,6 +10,7 @@ import numpy as np
 # ============================================================
 
 def fpCA_error_analysis(A, U, V):
+    # Relative errors for fpCA factors.
     errors = []
     normA = np.linalg.norm(A, 'fro')
 
@@ -22,6 +23,7 @@ def fpCA_error_analysis(A, U, V):
 
 
 def ppCA_error_analysis(A, U, V):
+    # Relative errors for ppCA factors.
     errors = []
     normA = np.linalg.norm(A, 'fro')
 
@@ -34,6 +36,7 @@ def ppCA_error_analysis(A, U, V):
 
 
 def time_approximation(method, A, max_rank, epsilon=1e-12):
+    # Time only the approximation step.
     start = time.perf_counter()
     U, V = method(A, max_rank, epsilon)
     end = time.perf_counter()
@@ -43,6 +46,7 @@ def time_approximation(method, A, max_rank, epsilon=1e-12):
 
 
 def time_error_analysis(method, A, U, V):
+    # Time only the error computation.
     start = time.perf_counter()
     errors = method(A, U, V)
     end = time.perf_counter()
@@ -52,6 +56,7 @@ def time_error_analysis(method, A, U, V):
 
 
 def svd_error(A, max_rank):
+    # Best possible Frobenius errors.
     s = np.linalg.svd(A, compute_uv=False)
     normA = np.sqrt(np.sum(s ** 2))
     errors = []
